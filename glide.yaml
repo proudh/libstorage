@@ -44,6 +44,11 @@ import:
     repo:    https://github.com/aws/aws-sdk-go
 
 
+### EC2
+#  - package: github.com/aws/aws-sdk-go
+#    ref:     aac89266a9bc98ecbf440bb675e9dc95a94d8dc6
+#    repo:    https://github.com/aws/aws-sdk-go
+
 ################################################################################
 ##                             Build System Tools                             ##
 ################################################################################

@@ -45,6 +45,30 @@ const (
 
 	//ConfigOldDockerLinuxVolumeRootPath is a config key.
 	ConfigOldDockerLinuxVolumeRootPath = "linux.volume.rootpath"
+
+	//ConfigOldEBS is a config key.
+	ConfigOldEBS = "ec2"
+
+	//ConfigOldEBSAccessKey is a config key.
+	ConfigOldEBSAccessKey = ConfigOldEBS + ".accessKey"
+
+	//ConfigOldEBSSecretKey is a config key.
+	ConfigOldEBSSecretKey = ConfigOldEBS + ".secretKey"
+
+	//ConfigOldEBSRegion is a config key.
+	ConfigOldEBSRegion = ConfigOldEBS + ".region"
+
+	//ConfigOldEBSEndpoint is a config key.
+	ConfigOldEBSEndpoint = ConfigOldEBS + ".endpoint"
+
+	//ConfigOldEBSMaxRetries is a config key.
+	ConfigOldEBSMaxRetries = ConfigOldEBS + ".maxRetries"
+
+	//ConfigOldEBSTag is a config key.
+	ConfigOldEBSTag = ConfigOldEBS + ".tag"
+
+	//ConfigOldEBSRexrayTag is a config key.
+	ConfigOldEBSRexrayTag = ConfigOldEBS + ".rexrayTag"
 )
 
 // BackCompat ensures keys can be used from old configurations.
