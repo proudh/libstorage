@@ -36,6 +36,11 @@ import:
   - package: github.com/emccode/goisilon
     ref:     f9b53f0aaadb12a26b134830142fc537f492cb13
 
+### EC2
+  - package: github.com/aws/aws-sdk-go
+    ref:     aac89266a9bc98ecbf440bb675e9dc95a94d8dc6
+    repo:    https://github.com/aws/aws-sdk-go
+
 ################################################################################
 ##                             Build System Tools                             ##
 ################################################################################

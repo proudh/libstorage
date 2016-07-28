@@ -38,6 +38,9 @@ imports:
   repo: https://github.com/emccode/goscaleio
   subpackages:
   - types/v1
+- name: github.com/aws/aws-sdk-go
+  version: aac89266a9bc98ecbf440bb675e9dc95a94d8dc6
+  repo: https://github.com/aws/aws-sdk-go
 - name: github.com/go-yaml/yaml
   version: b4a9f8c4b84c6c4256d669c649837f1441e4b050
   repo: https://github.com/akutz/yaml.git
