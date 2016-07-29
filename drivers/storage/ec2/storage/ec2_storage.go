@@ -9,7 +9,15 @@ import (
 	"time"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/akutz/gofig"
 	"github.com/akutz/goof"
+
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/credentials/ec2rolecreds"
+	"github.com/aws/aws-sdk-go/aws/ec2metadata"
+	"github.com/aws/aws-sdk-go/aws/session"
+	awsec2 "github.com/aws/aws-sdk-go/service/ec2"
 
 	"github.com/emccode/libstorage/api/context"
 	"github.com/emccode/libstorage/api/registry"
@@ -20,7 +28,10 @@ import (
 // Config, client, and whatever else you need to connect to the provider
 // Client varies with provider SDK
 type driver struct {
-	config   gofig.Config
+	config           gofig.Config
+	instanceDocument *instanceIdentityDocument
+	ec2Instance      *awsec2.EC2
+	ec2Tag           string
 	awsCreds *credentials.Credentials
 }
 
@@ -57,13 +68,13 @@ func (d *driver) Name() string {
 func (d *driver) Init(context types.Context, config gofig.Config) error {
 	d.config = config
 
-	log.WithFields(fields).Debug("starting provider driver")
-
 	// Initialize with config content
 	fields := map[string]interface{}{
 		"moduleName": d.Name(),
 		"accessKey":  d.accessKey(),
 	}
+
+	log.WithFields(fields).Debug("starting provider driver")
 
 	// Mask password
 	if d.secretKey() == "" {
@@ -75,7 +86,7 @@ func (d *driver) Init(context types.Context, config gofig.Config) error {
 	var err error
 	d.instanceDocument, err = getInstanceIdentityDocument()
 	if err != nil {
-		return goof.WithFields(ef(), "error getting instance id doc")
+		return goof.WithFieldsE(fields, "error getting instance id doc", err)
 	}
 
 	region := d.region()
@@ -87,7 +98,7 @@ func (d *driver) Init(context types.Context, config gofig.Config) error {
 
 	mySession := session.New()
 
-	d.ec2creds = credentials.NewChainCredentials(
+	d.awsCreds = credentials.NewChainCredentials(
 		[]credentials.Provider{
 			&credentials.StaticProvider{Value: credentials.Value{AccessKeyID: d.accessKey(), SecretAccessKey: d.secretKey()}},
 			&credentials.EnvProvider{},
@@ -97,9 +108,9 @@ func (d *driver) Init(context types.Context, config gofig.Config) error {
 			},
 		})
 
-	config := aws.NewConfig().WithCredentials(d.ec2creds).WithRegion(region)
+	awsConfig := aws.NewConfig().WithCredentials(d.awsCreds).WithRegion(region)
 
-	d.ec2Instance = ec2.New(mySession, config)
+	d.ec2Instance = awsec2.New(mySession, awsConfig)
 
 	log.WithFields(fields).Info("storage driver initialized")
 
@@ -180,15 +191,15 @@ func (d *driver) VolumeInspect(
 func (d *driver) VolumeCreate(ctx types.Context, volumeName string,
 	opts *types.VolumeCreateOpts) (*types.Volume, error) {
 
-	fields := eff(map[string]interface{}{
+	fields := map[string]interface{}{
 		"volumeName": volumeName,
 		"opts":       opts,
-	})
+	}
 
 	log.WithFields(fields).Debug("creating volume")
 
 	// check if volume with same name exists
-	volumes, err := d.GetVolume("", volumeName)
+	volumes, err := d.getVolume(ctx, "", volumeName, false)
 	if err != nil {
 		return nil, err
 	}
@@ -223,7 +234,7 @@ func (d *driver) VolumeCreate(ctx types.Context, volumeName string,
 	}
 
 	// return the volume created
-	return d.VolumeInspect(ctx, vol.ID, &types.VolumeInspectOpts{
+	return d.VolumeInspect(ctx, *vol.VolumeId, &types.VolumeInspectOpts{
 		Attachments: true,
 	})
 }
@@ -267,10 +278,10 @@ func (d *driver) VolumeRemove(
 
 	// no volume ID inputted
 	if volumeID == "" {
-		return nil, "", goof.New("missing volume id")
+		return goof.New("missing volume id")
 	}
 
-	dvInput := &ec2.DeleteVolumeInput{
+	dvInput := &awsec2.DeleteVolumeInput{
 		VolumeId: &volumeID,
 	}
 	_, err := d.ec2Instance.DeleteVolume(dvInput)
@@ -363,15 +374,15 @@ func (d *driver) VolumeDetach(
 		return nil, goof.New("no volume returned")
 	}
 
-	// TODO that is what this error is checking, right?
-	if *volumes[0].State == ec2.VolumeStateAvailable {
+	// volume has no attachments
+	if len(volumes[0].Attachments) == 0 {
 		return nil, goof.New("volume already detached")
 	}
 
 	// TODO put into helper function i.e. detachVolume?
-	dvInput := &ec2.DetachVolumeInput{
-		VolumeId: volumeID,
-		Force:    opts.Force,
+	dvInput := &awsec2.DetachVolumeInput{
+		VolumeId: &volumeID,
+		Force:    &opts.Force,
 	}
 
 	if _, err = d.ec2Instance.DetachVolume(dvInput); err != nil {
@@ -427,29 +438,29 @@ func (d *driver) SnapshotRemove(
 ///////////////////////////////////////////////////////////////////////
 // getVolume searches and returns a volume matching criteria
 func (d *driver) getVolume(
-	//	ctx types.Context,
+	ctx types.Context,
 	volumeID string, volumeName string,
 	attachments bool) ([]*types.Volume, error) {
 	// Add filters using parameters if specified
-	filters := []*ec2.Filter{}
+	filters := []*awsec2.Filter{}
 	if volumeName != "" {
-		filters = append(filters, &ec2.Filter{
+		filters = append(filters, &awsec2.Filter{
 			Name: aws.String("tag:Name"), Values: []*string{&volumeName}})
 	}
 
 	if volumeID != "" {
-		filters = append(filters, &ec2.Filter{
+		filters = append(filters, &awsec2.Filter{
 			Name: aws.String("volume-id"), Values: []*string{&volumeID}})
 	}
 
 	if d.ec2Tag != "" {
-		filters = append(filters, &ec2.Filter{
-			Name:   aws.String(fmt.Sprintf("tag:%s", rexrayTag)),
+		filters = append(filters, &awsec2.Filter{
+			Name:   aws.String(fmt.Sprintf("tag:%s", d.rexrayTag())),
 			Values: []*string{&d.ec2Tag}})
 	}
 
 	// Prepare input
-	dvInput := &ec2.DescribeVolumesInput{}
+	dvInput := &awsec2.DescribeVolumesInput{}
 
 	// Apply filters if parameters are specified
 	if len(filters) > 0 {
@@ -462,7 +473,7 @@ func (d *driver) getVolume(
 
 	resp, err := d.ec2Instance.DescribeVolumes(dvInput)
 	if err != nil {
-		return []*ec2.Volume{}, err
+		return []*types.Volume{}, err
 	}
 
 	// TODO update fields?
@@ -475,24 +486,24 @@ func (d *driver) getVolume(
 
 		volumeSD := &types.Volume{
 			Name:             name,
-			VolumeID:         *volume.VolumeId,
+			ID:               *volume.VolumeId,
 			AvailabilityZone: *volume.AvailabilityZone,
 			Status:           *volume.State,
-			VolumeType:       *volume.VolumeType,
-			Size:             fmt.Sprintf("%d", *volume.Size),
+			Type:             *volume.VolumeType,
+			Size:             *volume.Size,
 		}
 		if attachments {
 			for _, attachment := range volume.Attachments {
 				attachmentSD := &types.VolumeAttachment{
 					VolumeID:   *attachment.VolumeId,
-					InstanceID: *attachment.InstanceId,
+					InstanceID: &types.InstanceID{ID: *attachment.InstanceId, Driver: ec2.Name},
 					DeviceName: *attachment.Device,
 					Status:     *attachment.State,
 				}
 				attachmentsSD = append(attachmentsSD, attachmentSD)
 			}
 
-			if len(atts) > 0 {
+			if len(attachmentsSD) > 0 {
 				volumeSD.Attachments = attachmentsSD
 			}
 		}
@@ -521,19 +532,15 @@ func (d *driver) attachVolume(
 		return goof.New("too many volumes returned")
 	}
 	*/
-	if instanceID == "" {
-		instanceID = d.instanceDocument.InstanceID
-	}
 
-	avInput := &ec2.AttachVolumeInput{
-		InstanceId: &instanceID,
+	avInput := &awsec2.AttachVolumeInput{
+		InstanceId: &d.instanceDocument.InstanceID,
 		VolumeId:   &volumeID,
 	}
-	_, err = d.ec2Instance.AttachVolume(avInput)
-
-	if err != nil {
-		return nil, err
+	if _, err := d.ec2Instance.AttachVolume(avInput); err != nil {
+		return err
 	}
+	return nil
 }
 
 func getInstanceIdentityDocument() (*instanceIdentityDocument, error) {
@@ -566,69 +573,64 @@ func getInstanceIdentityDocument() (*instanceIdentityDocument, error) {
 }
 
 func (d *driver) createVolume(ctx types.Context, volumeName string,
-	vol *types.Volume) (*ec2.Volume, error) {
-
-	if volumeID != "" && runAsync {
-		return &ec2.Volume{}, errors.ErrRunAsyncFromVolume
-	}
+	vol *types.Volume) (*awsec2.Volume, error) {
 
 	var err error
 
-	var server ec2.Instance
+	var server awsec2.Instance
 	if server, err = d.getInstance(); err != nil {
-		return &ec2.Volume{}, err
+		return &awsec2.Volume{}, err
 	}
 
-	d.createVolumeEnsureAvailabilityZone(vol.AvailabilityZone, &server)
+	d.createVolumeEnsureAvailabilityZone(&vol.AvailabilityZone, &server)
 
-	options := &ec2.CreateVolumeInput{
-		Size:             vol.Size,
-		AvailabilityZone: vol.AvailabilityZone,
-		VolumeType:       vol.Type,
+	options := &awsec2.CreateVolumeInput{
+		Size:             &vol.Size,
+		AvailabilityZone: &vol.AvailabilityZone,
+		VolumeType:       &vol.Type,
 	}
 
 	if vol.IOPS > 0 {
-		options.Iops = vol.IOPS
+		options.Iops = &vol.IOPS
 	}
 
-	var resp *ec2.Volume
+	var resp *awsec2.Volume
 	if resp, err = d.ec2Instance.CreateVolume(options); err != nil {
-		return &ec2.Volume{}, err
+		return &awsec2.Volume{}, err
 	}
 
 	if err = d.createVolumeCreateTags(volumeName, resp); err != nil {
-		return &ec2.Volume{}, err
+		return &awsec2.Volume{}, err
 	}
 
-	if err = d.createVolumeWait(
-		runAsync, snapshotID, volumeID, resp); err != nil {
-		return &ec2.Volume{}, err
+	if err = d.waitVolumeComplete(resp); err != nil {
+		return &awsec2.Volume{}, err
 	}
 
 	return resp, nil
 }
 
 func (d *driver) createVolumeEnsureAvailabilityZone(
-	availabilityZone *string, server *ec2.Instance) {
+	availabilityZone *string, server *awsec2.Instance) {
 	if *availabilityZone == "" {
 		*availabilityZone = *server.Placement.AvailabilityZone
 	}
 }
 
 func (d *driver) createVolumeCreateTags(
-	volumeName string, resp *ec2.Volume) (err error) {
+	volumeName string, resp *awsec2.Volume) (err error) {
 	if volumeName == "" && d.ec2Tag == "" {
 		return
 	}
 
-	var ctInput *ec2.CreateTagsInput
+	var ctInput *awsec2.CreateTagsInput
 	initCTInput := func() {
 		if ctInput != nil {
 			return
 		}
-		ctInput = &ec2.CreateTagsInput{
+		ctInput = &awsec2.CreateTagsInput{
 			Resources: []*string{resp.VolumeId},
-			Tags:      []*ec2.Tag{},
+			Tags:      []*awsec2.Tag{},
 		}
 	}
 
@@ -636,7 +638,7 @@ func (d *driver) createVolumeCreateTags(
 		initCTInput()
 		ctInput.Tags = append(
 			ctInput.Tags,
-			&ec2.Tag{
+			&awsec2.Tag{
 				Key:   aws.String("Name"),
 				Value: &volumeName,
 			})
@@ -646,8 +648,8 @@ func (d *driver) createVolumeCreateTags(
 		initCTInput()
 		ctInput.Tags = append(
 			ctInput.Tags,
-			&ec2.Tag{
-				Key:   aws.String(rexrayTag),
+			&awsec2.Tag{
+				Key:   aws.String(d.rexrayTag()),
 				Value: &d.ec2Tag,
 			})
 	}
@@ -659,19 +661,53 @@ func (d *driver) createVolumeCreateTags(
 	return nil
 }
 
+func (d *driver) waitVolumeComplete(resp *awsec2.Volume) error {
+
+	for {
+		if *resp.State == awsec2.VolumeStateAvailable {
+			break
+		}
+		time.Sleep(1 * time.Second)
+	}
+
+	return nil
+}
+
+func getName(tags []*awsec2.Tag) string {
+	for _, tag := range tags {
+		if *tag.Key == "Name" {
+			return *tag.Value
+		}
+	}
+	return ""
+}
+
+func (d *driver) getInstance() (awsec2.Instance, error) {
+
+	diInput := &awsec2.DescribeInstancesInput{
+		InstanceIds: []*string{&d.instanceDocument.InstanceID},
+	}
+	resp, err := d.ec2Instance.DescribeInstances(diInput)
+	if err != nil {
+		return awsec2.Instance{}, err
+	}
+
+	return *resp.Reservations[0].Instances[0], nil
+}
+
 func (d *driver) accessKey() string {
-	return d.r.Config.GetString("aws.accessKey")
+	return d.config.GetString("aws.accessKey")
 }
 
 func (d *driver) secretKey() string {
-	return d.r.Config.GetString("aws.secretKey")
+	return d.config.GetString("aws.secretKey")
 }
 
 func (d *driver) region() string {
-	return d.r.Config.GetString("aws.region")
+	return d.config.GetString("aws.region")
 }
 
 func (d *driver) rexrayTag() string {
-	return d.r.Config.GetString("aws.rexrayTag")
+	return d.config.GetString("aws.rexrayTag")
 }
 
