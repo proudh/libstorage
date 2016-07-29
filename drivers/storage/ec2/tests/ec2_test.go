@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+//	"fmt"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/akutz/gofig"
@@ -17,7 +18,7 @@ import (
 	"github.com/emccode/libstorage/api/types"
 	"github.com/emccode/libstorage/api/utils"
 	"github.com/emccode/libstorage/drivers/storage/ec2"
-	// load the  driver
+	ec2x "github.com/emccode/libstorage/drivers/storage/ec2/executor"
 )
 
 // Put contents of sample config.yml here
@@ -36,7 +37,7 @@ var volumeName2 string
 // Check environment vars to see whether or not to run this test
 func skipTests() bool {
 	travis, _ := strconv.ParseBool(os.Getenv("TRAVIS"))
-	noTest, _ := strconv.ParseBool(os.Getenv("TEST_SKIP_SCALEIO"))
+	noTest, _ := strconv.ParseBool(os.Getenv("TEST_SKIP_EC2"))
 	return travis || noTest
 }
 
