@@ -707,18 +707,18 @@ func (d *driver) getInstance() (awsec2.Instance, error) {
 }
 
 func (d *driver) accessKey() string {
-	return d.config.GetString("aws.accessKey")
+	return d.config.GetString("ec2.accessKey")
 }
 
 func (d *driver) secretKey() string {
-	return d.config.GetString("aws.secretKey")
+	return d.config.GetString("ec2.secretKey")
 }
 
 func (d *driver) region() string {
-	return d.config.GetString("aws.region")
+	return d.config.GetString("ec2.region")
 }
 
 func (d *driver) rexrayTag() string {
-	return d.config.GetString("aws.rexrayTag")
+	return d.config.GetString("ec2.rexrayTag")
 }
 

@@ -15,10 +15,10 @@ func init() {
 
 func registerConfig() {
 	r := gofig.NewRegistration("Amazon EC2")
-	r.Key(gofig.String, "", "", "", "aws.accessKey")
-	r.Key(gofig.String, "", "", "", "aws.secretKey")
-	r.Key(gofig.String, "", "", "", "aws.region")
-	r.Key(gofig.String, "", "", "", "aws.rexrayTag")
+	r.Key(gofig.String, "", "", "", "ec2.accessKey")
+	r.Key(gofig.String, "", "", "", "ec2.secretKey")
+	r.Key(gofig.String, "", "", "", "ec2.region")
+	r.Key(gofig.String, "", "", "", "ec2.rexrayTag")
 	gofig.Register(r)
 }
 
