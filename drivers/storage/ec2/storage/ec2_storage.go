@@ -19,7 +19,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	awsec2 "github.com/aws/aws-sdk-go/service/ec2"
 
-	"github.com/emccode/libstorage/api/context"
+//	"github.com/emccode/libstorage/api/context"
 	"github.com/emccode/libstorage/api/registry"
 	"github.com/emccode/libstorage/api/types"
 	"github.com/emccode/libstorage/drivers/storage/ec2"
@@ -137,8 +137,8 @@ func (d *driver) Type(ctx types.Context) (types.StorageType, error) {
 func (d *driver) InstanceInspect(
 	ctx types.Context,
 	opts types.Store) (*types.Instance, error) {
-
-	// get instance ID
+	return nil, types.ErrNotImplemented
+/*	// get instance ID
 	iid := context.MustInstanceID(ctx)
 
 	// If no instance ID, return blank instance
@@ -153,19 +153,20 @@ func (d *driver) InstanceInspect(
 	}
 	instanceID := &types.InstanceID{ID: awsSubnetID, Driver: d.Name()}
 
-	return &types.Instance{InstanceID: instanceID}, nil
+	return &types.Instance{InstanceID: instanceID}, nil*/
 }
 
 // Volumes returns all volumes or a filtered list of volumes.
 func (d *driver) Volumes(
 	ctx types.Context,
 	opts *types.VolumesOpts) ([]*types.Volume, error) {
+	return nil, types.ErrNotImplemented
 	// Get all volumes (and their attachments if specified)
-	vols, err := d.getVolume(ctx, "", "", opts.Attachments)
+/*	vols, err := d.getVolume(ctx, "", "", opts.Attachments)
 	if err != nil {
 		return nil, err
 	}
-	return vols, nil
+	return vols, nil*/
 }
 
 // VolumeInspect inspects a single volume.
@@ -173,8 +174,9 @@ func (d *driver) VolumeInspect(
 	ctx types.Context,
 	volumeID string,
 	opts *types.VolumeInspectOpts) (*types.Volume, error) {
+	return nil, types.ErrNotImplemented
 	// Get volume corresponding to volume ID
-	vols, err := d.getVolume(ctx, volumeID, "", opts.Attachments)
+	/*vols, err := d.getVolume(ctx, volumeID, "", opts.Attachments)
 	if err != nil {
 		return nil, err
 	}
@@ -184,14 +186,15 @@ func (d *driver) VolumeInspect(
 
 	// Because getVolume returns an array
 	// and we only expect the 1st element to be a match, return 1st element
-	return vols[0], nil
+	return vols[0], nil*/
 }
 
 // VolumeCreate creates a new volume.
 func (d *driver) VolumeCreate(ctx types.Context, volumeName string,
 	opts *types.VolumeCreateOpts) (*types.Volume, error) {
+	return nil, types.ErrNotImplemented
 
-	fields := map[string]interface{}{
+	/*fields := map[string]interface{}{
 		"volumeName": volumeName,
 		"opts":       opts,
 	}
@@ -236,7 +239,7 @@ func (d *driver) VolumeCreate(ctx types.Context, volumeName string,
 	// return the volume created
 	return d.VolumeInspect(ctx, *vol.VolumeId, &types.VolumeInspectOpts{
 		Attachments: true,
-	})
+	})*/
 }
 
 // VolumeCreateFromSnapshot creates a new volume from an existing snapshot.
@@ -271,7 +274,9 @@ func (d *driver) VolumeRemove(
 	ctx types.Context,
 	volumeID string,
 	opts types.Store) error {
-	fields := map[string]interface{}{
+	return types.ErrNotImplemented
+
+	/*fields := map[string]interface{}{
 		"provider": ec2.Name,
 		"volumeID": volumeID,
 	}
@@ -289,7 +294,7 @@ func (d *driver) VolumeRemove(
 		return goof.WithFieldsE(fields, "error deleting volume", err)
 	}
 
-	return nil
+	return nil*/
 }
 
 // VolumeAttach attaches a volume and provides a token clients can use
@@ -298,59 +303,60 @@ func (d *driver) VolumeAttach(
 	ctx types.Context,
 	volumeID string,
 	opts *types.VolumeAttachOpts) (*types.Volume, string, error) {
-	// no volume ID inputted
-	if volumeID == "" {
-		return nil, "", goof.New("missing volume id")
-	}
-	/*
-		nextDeviceName, err := d.GetDeviceNextAvailable()
-		if err != nil {
-			return nil, err
-		}*/
+	return nil, "", types.ErrNotImplemented
+// 	// no volume ID inputted
+// 	if volumeID == "" {
+// 		return nil, "", goof.New("missing volume id")
+// 	}
+// 	/*
+// 		nextDeviceName, err := d.GetDeviceNextAvailable()
+// 		if err != nil {
+// 			return nil, err
+// 		}*/
 
-	// review volume with attachments to any host
-	volumes, err := d.getVolume(ctx, volumeID, "", false)
-	if err != nil {
-		return nil, "", err
-	}
+// 	// review volume with attachments to any host
+// 	volumes, err := d.getVolume(ctx, volumeID, "", false)
+// 	if err != nil {
+// 		return nil, "", err
+// 	}
 
-	// sanity checks: is there a volume to attach? is volume already attached?
-	if len(volumes) == 0 {
-		return nil, "", goof.New("no volume found")
-	}
-	if len(volumes[0].Attachments) > 0 && !opts.Force {
-		return nil, "", goof.New("volume already attached to a host")
-	}
-	// option to force attachment - detach other volume first
-	if opts.Force {
-		if _, err := d.VolumeDetach(ctx, volumeID, nil); err != nil {
-			return nil, "", err
-		}
-	}
+// 	// sanity checks: is there a volume to attach? is volume already attached?
+// 	if len(volumes) == 0 {
+// 		return nil, "", goof.New("no volume found")
+// 	}
+// 	if len(volumes[0].Attachments) > 0 && !opts.Force {
+// 		return nil, "", goof.New("volume already attached to a host")
+// 	}
+// 	// option to force attachment - detach other volume first
+// 	if opts.Force {
+// 		if _, err := d.VolumeDetach(ctx, volumeID, nil); err != nil {
+// 			return nil, "", err
+// 		}
+// 	}
 
-	// call helper function
-	err = d.attachVolume(ctx, volumeID, "")
-	if err != nil {
-		return nil, "", goof.WithFieldsE(
-			log.Fields{
-				"provider": ec2.Name,
-				"volumeID": volumeID},
-			"error attaching volume",
-			err,
-		)
-	}
+// 	// call helper function
+// 	err = d.attachVolume(ctx, volumeID, "")
+// 	if err != nil {
+// 		return nil, "", goof.WithFieldsE(
+// 			log.Fields{
+// 				"provider": ec2.Name,
+// 				"volumeID": volumeID},
+// 			"error attaching volume",
+// 			err,
+// 		)
+// 	}
 
-	// check if successful attach
-	attachedVol, err := d.VolumeInspect(
-		ctx, volumeID, &types.VolumeInspectOpts{
-			Attachments: true,
-			Opts:        opts.Opts,
-		})
-	if err != nil {
-		return nil, "", goof.WithError("error getting volume", err)
-	}
+// 	// check if successful attach
+// 	attachedVol, err := d.VolumeInspect(
+// 		ctx, volumeID, &types.VolumeInspectOpts{
+// 			Attachments: true,
+// 			Opts:        opts.Opts,
+// 		})
+// 	if err != nil {
+// 		return nil, "", goof.WithError("error getting volume", err)
+// 	}
 
-	return attachedVol, attachedVol.ID, nil
+// 	return attachedVol, attachedVol.ID, nil
 }
 
 // VolumeDetach detaches a volume.
@@ -358,44 +364,45 @@ func (d *driver) VolumeDetach(
 	ctx types.Context,
 	volumeID string,
 	opts *types.VolumeDetachOpts) (*types.Volume, error) {
-	// check for errors:
-	// no volume ID inputted
-	if volumeID == "" {
-		return nil, goof.New("missing volume id")
-	}
+	return nil, types.ErrNotImplemented
+// 	// check for errors:
+// 	// no volume ID inputted
+// 	if volumeID == "" {
+// 		return nil, goof.New("missing volume id")
+// 	}
 
-	volumes, err := d.getVolume(ctx, volumeID, "", false)
-	if err != nil {
-		return nil, err
-	}
+// 	volumes, err := d.getVolume(ctx, volumeID, "", false)
+// 	if err != nil {
+// 		return nil, err
+// 	}
 
-	// no volumes to detach
-	if len(volumes) == 0 {
-		return nil, goof.New("no volume returned")
-	}
+// 	// no volumes to detach
+// 	if len(volumes) == 0 {
+// 		return nil, goof.New("no volume returned")
+// 	}
 
-	// volume has no attachments
-	if len(volumes[0].Attachments) == 0 {
-		return nil, goof.New("volume already detached")
-	}
+// 	// volume has no attachments
+// 	if len(volumes[0].Attachments) == 0 {
+// 		return nil, goof.New("volume already detached")
+// 	}
 
-	// TODO put into helper function i.e. detachVolume?
-	dvInput := &awsec2.DetachVolumeInput{
-		VolumeId: &volumeID,
-		Force:    &opts.Force,
-	}
+// 	// TODO put into helper function i.e. detachVolume?
+// 	dvInput := &awsec2.DetachVolumeInput{
+// 		VolumeId: &volumeID,
+// 		Force:    &opts.Force,
+// 	}
 
-	if _, err = d.ec2Instance.DetachVolume(dvInput); err != nil {
-		return nil, goof.WithFieldsE(
-			log.Fields{
-				"provider": ec2.Name,
-				"volumeID": volumeID}, "error detaching volume", err)
-	}
+// 	if _, err = d.ec2Instance.DetachVolume(dvInput); err != nil {
+// 		return nil, goof.WithFieldsE(
+// 			log.Fields{
+// 				"provider": ec2.Name,
+// 				"volumeID": volumeID}, "error detaching volume", err)
+// 	}
 
-	ctx.Info("detached volume", volumeID)
+// 	ctx.Info("detached volume", volumeID)
 
-	return d.VolumeInspect(
-		ctx, volumeID, &types.VolumeInspectOpts{Attachments: true})
+// 	return d.VolumeInspect(
+// 		ctx, volumeID, &types.VolumeInspectOpts{Attachments: true})
 }
 
 // Snapshots returns all volumes or a filtered list of snapshots.
@@ -441,84 +448,86 @@ func (d *driver) getVolume(
 	ctx types.Context,
 	volumeID string, volumeName string,
 	attachments bool) ([]*types.Volume, error) {
+	return nil, types.ErrNotImplemented
 	// Add filters using parameters if specified
-	filters := []*awsec2.Filter{}
-	if volumeName != "" {
-		filters = append(filters, &awsec2.Filter{
-			Name: aws.String("tag:Name"), Values: []*string{&volumeName}})
-	}
+	// filters := []*awsec2.Filter{}
+	// if volumeName != "" {
+	// 	filters = append(filters, &awsec2.Filter{
+	// 		Name: aws.String("tag:Name"), Values: []*string{&volumeName}})
+	// }
 
-	if volumeID != "" {
-		filters = append(filters, &awsec2.Filter{
-			Name: aws.String("volume-id"), Values: []*string{&volumeID}})
-	}
+	// if volumeID != "" {
+	// 	filters = append(filters, &awsec2.Filter{
+	// 		Name: aws.String("volume-id"), Values: []*string{&volumeID}})
+	// }
 
-	if d.ec2Tag != "" {
-		filters = append(filters, &awsec2.Filter{
-			Name:   aws.String(fmt.Sprintf("tag:%s", d.rexrayTag())),
-			Values: []*string{&d.ec2Tag}})
-	}
+	// if d.ec2Tag != "" {
+	// 	filters = append(filters, &awsec2.Filter{
+	// 		Name:   aws.String(fmt.Sprintf("tag:%s", d.rexrayTag())),
+	// 		Values: []*string{&d.ec2Tag}})
+	// }
 
-	// Prepare input
-	dvInput := &awsec2.DescribeVolumesInput{}
+	// // Prepare input
+	// dvInput := &awsec2.DescribeVolumesInput{}
 
-	// Apply filters if parameters are specified
-	if len(filters) > 0 {
-		dvInput.Filters = filters
-	}
+	// // Apply filters if parameters are specified
+	// if len(filters) > 0 {
+	// 	dvInput.Filters = filters
+	// }
 
-	if volumeID != "" {
-		dvInput.VolumeIds = []*string{&volumeID}
-	}
+	// if volumeID != "" {
+	// 	dvInput.VolumeIds = []*string{&volumeID}
+	// }
 
-	resp, err := d.ec2Instance.DescribeVolumes(dvInput)
-	if err != nil {
-		return []*types.Volume{}, err
-	}
+	// resp, err := d.ec2Instance.DescribeVolumes(dvInput)
+	// if err != nil {
+	// 	return []*types.Volume{}, err
+	// }
 
-	// TODO update fields?
-	volumes := resp.Volumes
+	// // TODO update fields?
+	// volumes := resp.Volumes
 
-	var volumesSD []*types.Volume
-	for _, volume := range volumes {
-		var attachmentsSD []*types.VolumeAttachment
-		name := getName(volume.Tags)
+	// var volumesSD []*types.Volume
+	// for _, volume := range volumes {
+	// 	var attachmentsSD []*types.VolumeAttachment
+	// 	name := getName(volume.Tags)
 
-		volumeSD := &types.Volume{
-			Name:             name,
-			ID:               *volume.VolumeId,
-			AvailabilityZone: *volume.AvailabilityZone,
-			Status:           *volume.State,
-			Type:             *volume.VolumeType,
-			Size:             *volume.Size,
-		}
-		if attachments {
-			for _, attachment := range volume.Attachments {
-				attachmentSD := &types.VolumeAttachment{
-					VolumeID:   *attachment.VolumeId,
-					InstanceID: &types.InstanceID{ID: *attachment.InstanceId, Driver: ec2.Name},
-					DeviceName: *attachment.Device,
-					Status:     *attachment.State,
-				}
-				attachmentsSD = append(attachmentsSD, attachmentSD)
-			}
+	// 	volumeSD := &types.Volume{
+	// 		Name:             name,
+	// 		ID:               *volume.VolumeId,
+	// 		AvailabilityZone: *volume.AvailabilityZone,
+	// 		Status:           *volume.State,
+	// 		Type:             *volume.VolumeType,
+	// 		Size:             *volume.Size,
+	// 	}
+	// 	if attachments {
+	// 		for _, attachment := range volume.Attachments {
+	// 			attachmentSD := &types.VolumeAttachment{
+	// 				VolumeID:   *attachment.VolumeId,
+	// 				InstanceID: &types.InstanceID{ID: *attachment.InstanceId, Driver: ec2.Name},
+	// 				DeviceName: *attachment.Device,
+	// 				Status:     *attachment.State,
+	// 			}
+	// 			attachmentsSD = append(attachmentsSD, attachmentSD)
+	// 		}
 
-			if len(attachmentsSD) > 0 {
-				volumeSD.Attachments = attachmentsSD
-			}
-		}
-		// Some volume types have no IOPS, so we get nil in volume.Iops
-		if volume.Iops != nil {
-			volumeSD.IOPS = *volume.Iops
-		}
-		volumesSD = append(volumesSD, volumeSD)
-	}
-	return volumesSD, nil
+	// 		if len(attachmentsSD) > 0 {
+	// 			volumeSD.Attachments = attachmentsSD
+	// 		}
+	// 	}
+	// 	// Some volume types have no IOPS, so we get nil in volume.Iops
+	// 	if volume.Iops != nil {
+	// 		volumeSD.IOPS = *volume.Iops
+	// 	}
+	// 	volumesSD = append(volumesSD, volumeSD)
+	// }
+	// return volumesSD, nil
 }
 
 // Used in VolumeAttach
 func (d *driver) attachVolume(
 	ctx types.Context, volumeID, volumeName string) error {
+	return types.ErrNotImplemented
 	/* TODO sanity check # of volumes to attach?
 	medium, err := d.vbox.GetMedium(volumeID, volumeName)
 	if err != nil {
@@ -533,14 +542,14 @@ func (d *driver) attachVolume(
 	}
 	*/
 
-	avInput := &awsec2.AttachVolumeInput{
-		InstanceId: &d.instanceDocument.InstanceID,
-		VolumeId:   &volumeID,
-	}
-	if _, err := d.ec2Instance.AttachVolume(avInput); err != nil {
-		return err
-	}
-	return nil
+	// avInput := &awsec2.AttachVolumeInput{
+	// 	InstanceId: &d.instanceDocument.InstanceID,
+	// 	VolumeId:   &volumeID,
+	// }
+	// if _, err := d.ec2Instance.AttachVolume(avInput); err != nil {
+	// 	return err
+	// }
+	// return nil
 }
 
 func getInstanceIdentityDocument() (*instanceIdentityDocument, error) {
@@ -574,125 +583,127 @@ func getInstanceIdentityDocument() (*instanceIdentityDocument, error) {
 
 func (d *driver) createVolume(ctx types.Context, volumeName string,
 	vol *types.Volume) (*awsec2.Volume, error) {
+	return nil, types.ErrNotImplemented
+	// var err error
 
-	var err error
+	// var server awsec2.Instance
+	// if server, err = d.getInstance(); err != nil {
+	// 	return &awsec2.Volume{}, err
+	// }
 
-	var server awsec2.Instance
-	if server, err = d.getInstance(); err != nil {
-		return &awsec2.Volume{}, err
-	}
+	// d.createVolumeEnsureAvailabilityZone(&vol.AvailabilityZone, &server)
 
-	d.createVolumeEnsureAvailabilityZone(&vol.AvailabilityZone, &server)
+	// options := &awsec2.CreateVolumeInput{
+	// 	Size:             &vol.Size,
+	// 	AvailabilityZone: &vol.AvailabilityZone,
+	// 	VolumeType:       &vol.Type,
+	// }
 
-	options := &awsec2.CreateVolumeInput{
-		Size:             &vol.Size,
-		AvailabilityZone: &vol.AvailabilityZone,
-		VolumeType:       &vol.Type,
-	}
+	// if vol.IOPS > 0 {
+	// 	options.Iops = &vol.IOPS
+	// }
 
-	if vol.IOPS > 0 {
-		options.Iops = &vol.IOPS
-	}
+	// var resp *awsec2.Volume
+	// if resp, err = d.ec2Instance.CreateVolume(options); err != nil {
+	// 	return &awsec2.Volume{}, err
+	// }
 
-	var resp *awsec2.Volume
-	if resp, err = d.ec2Instance.CreateVolume(options); err != nil {
-		return &awsec2.Volume{}, err
-	}
+	// if err = d.createVolumeCreateTags(volumeName, resp); err != nil {
+	// 	return &awsec2.Volume{}, err
+	// }
 
-	if err = d.createVolumeCreateTags(volumeName, resp); err != nil {
-		return &awsec2.Volume{}, err
-	}
+	// if err = d.waitVolumeComplete(resp); err != nil {
+	// 	return &awsec2.Volume{}, err
+	// }
 
-	if err = d.waitVolumeComplete(resp); err != nil {
-		return &awsec2.Volume{}, err
-	}
-
-	return resp, nil
+	// return resp, nil
 }
 
 func (d *driver) createVolumeEnsureAvailabilityZone(
 	availabilityZone *string, server *awsec2.Instance) {
-	if *availabilityZone == "" {
-		*availabilityZone = *server.Placement.AvailabilityZone
-	}
+	// if *availabilityZone == "" {
+	// 	*availabilityZone = *server.Placement.AvailabilityZone
+	// }
 }
 
 func (d *driver) createVolumeCreateTags(
 	volumeName string, resp *awsec2.Volume) (err error) {
-	if volumeName == "" && d.ec2Tag == "" {
-		return
-	}
+	return types.ErrNotImplemented
+	// if volumeName == "" && d.ec2Tag == "" {
+	// 	return
+	// }
 
-	var ctInput *awsec2.CreateTagsInput
-	initCTInput := func() {
-		if ctInput != nil {
-			return
-		}
-		ctInput = &awsec2.CreateTagsInput{
-			Resources: []*string{resp.VolumeId},
-			Tags:      []*awsec2.Tag{},
-		}
-	}
+	// var ctInput *awsec2.CreateTagsInput
+	// initCTInput := func() {
+	// 	if ctInput != nil {
+	// 		return
+	// 	}
+	// 	ctInput = &awsec2.CreateTagsInput{
+	// 		Resources: []*string{resp.VolumeId},
+	// 		Tags:      []*awsec2.Tag{},
+	// 	}
+	// }
 
-	if volumeName != "" {
-		initCTInput()
-		ctInput.Tags = append(
-			ctInput.Tags,
-			&awsec2.Tag{
-				Key:   aws.String("Name"),
-				Value: &volumeName,
-			})
-	}
+	// if volumeName != "" {
+	// 	initCTInput()
+	// 	ctInput.Tags = append(
+	// 		ctInput.Tags,
+	// 		&awsec2.Tag{
+	// 			Key:   aws.String("Name"),
+	// 			Value: &volumeName,
+	// 		})
+	// }
 
-	if d.ec2Tag != "" {
-		initCTInput()
-		ctInput.Tags = append(
-			ctInput.Tags,
-			&awsec2.Tag{
-				Key:   aws.String(d.rexrayTag()),
-				Value: &d.ec2Tag,
-			})
-	}
+	// if d.ec2Tag != "" {
+	// 	initCTInput()
+	// 	ctInput.Tags = append(
+	// 		ctInput.Tags,
+	// 		&awsec2.Tag{
+	// 			Key:   aws.String(d.rexrayTag()),
+	// 			Value: &d.ec2Tag,
+	// 		})
+	// }
 
-	_, err = d.ec2Instance.CreateTags(ctInput)
-	if err != nil {
-		return err
-	}
-	return nil
+	// _, err = d.ec2Instance.CreateTags(ctInput)
+	// if err != nil {
+	// 	return err
+	// }
+	// return nil
 }
 
 func (d *driver) waitVolumeComplete(resp *awsec2.Volume) error {
+	return types.ErrNotImplemented
+	// for {
+	// 	if *resp.State == awsec2.VolumeStateAvailable {
+	// 		break
+	// 	}
+	// 	time.Sleep(1 * time.Second)
+	// }
 
-	for {
-		if *resp.State == awsec2.VolumeStateAvailable {
-			break
-		}
-		time.Sleep(1 * time.Second)
-	}
-
-	return nil
+	// return nil
 }
 
 func getName(tags []*awsec2.Tag) string {
-	for _, tag := range tags {
-		if *tag.Key == "Name" {
-			return *tag.Value
-		}
-	}
+	// for _, tag := range tags {
+	// 	if *tag.Key == "Name" {
+	// 		return *tag.Value
+	// 	}
+	// }
 	return ""
 }
 
 func (d *driver) getInstance() (awsec2.Instance, error) {
+	return awsec2.Instance{}, types.ErrNotImplemented
 
-	diInput := &awsec2.DescribeInstancesInput{
-		InstanceIds: []*string{&d.instanceDocument.InstanceID},
-	}
-	resp, err := d.ec2Instance.DescribeInstances(diInput)
-	if err != nil {
-		return awsec2.Instance{}, err
-	}
+	// diInput := &awsec2.DescribeInstancesInput{
+	// 	InstanceIds: []*string{&d.instanceDocument.InstanceID},
+	// }
+	// resp, err := d.ec2Instance.DescribeInstances(diInput)
+	// if err != nil {
+	// 	return awsec2.Instance{}, err
+	// }
 
-	return *resp.Reservations[0].Instances[0], nil
+	// return *resp.Reservations[0].Instances[0], nil
 }
 
 func (d *driver) accessKey() string {
