@@ -19,7 +19,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	awsec2 "github.com/aws/aws-sdk-go/service/ec2"
 
-//	"github.com/emccode/libstorage/api/context"
+	"github.com/emccode/libstorage/api/context"
 	"github.com/emccode/libstorage/api/registry"
 	"github.com/emccode/libstorage/api/types"
 	"github.com/emccode/libstorage/drivers/storage/ec2"
@@ -32,7 +32,7 @@ type driver struct {
 	instanceDocument *instanceIdentityDocument
 	ec2Instance      *awsec2.EC2
 	ec2Tag           string
-	awsCreds *credentials.Credentials
+	awsCreds         *credentials.Credentials
 }
 
 type instanceIdentityDocument struct {
@@ -137,8 +137,7 @@ func (d *driver) Type(ctx types.Context) (types.StorageType, error) {
 func (d *driver) InstanceInspect(
 	ctx types.Context,
 	opts types.Store) (*types.Instance, error) {
-	return nil, types.ErrNotImplemented
-/*	// get instance ID
+	// get instance ID
 	iid := context.MustInstanceID(ctx)
 
 	// If no instance ID, return blank instance
@@ -153,7 +152,7 @@ func (d *driver) InstanceInspect(
 	}
 	instanceID := &types.InstanceID{ID: awsSubnetID, Driver: d.Name()}
 
-	return &types.Instance{InstanceID: instanceID}, nil*/
+	return &types.Instance{InstanceID: instanceID}, nil
 }
 
 // Volumes returns all volumes or a filtered list of volumes.
@@ -162,11 +161,11 @@ func (d *driver) Volumes(
 	opts *types.VolumesOpts) ([]*types.Volume, error) {
 	return nil, types.ErrNotImplemented
 	// Get all volumes (and their attachments if specified)
-/*	vols, err := d.getVolume(ctx, "", "", opts.Attachments)
-	if err != nil {
-		return nil, err
-	}
-	return vols, nil*/
+	/*	vols, err := d.getVolume(ctx, "", "", opts.Attachments)
+		if err != nil {
+			return nil, err
+		}
+		return vols, nil*/
 }
 
 // VolumeInspect inspects a single volume.
@@ -304,59 +303,59 @@ func (d *driver) VolumeAttach(
 	volumeID string,
 	opts *types.VolumeAttachOpts) (*types.Volume, string, error) {
 	return nil, "", types.ErrNotImplemented
-// 	// no volume ID inputted
-// 	if volumeID == "" {
-// 		return nil, "", goof.New("missing volume id")
-// 	}
-// 	/*
-// 		nextDeviceName, err := d.GetDeviceNextAvailable()
-// 		if err != nil {
-// 			return nil, err
-// 		}*/
+	// 	// no volume ID inputted
+	// 	if volumeID == "" {
+	// 		return nil, "", goof.New("missing volume id")
+	// 	}
+	// 	/*
+	// 		nextDeviceName, err := d.GetDeviceNextAvailable()
+	// 		if err != nil {
+	// 			return nil, err
+	// 		}*/
 
-// 	// review volume with attachments to any host
-// 	volumes, err := d.getVolume(ctx, volumeID, "", false)
-// 	if err != nil {
-// 		return nil, "", err
-// 	}
+	// 	// review volume with attachments to any host
+	// 	volumes, err := d.getVolume(ctx, volumeID, "", false)
+	// 	if err != nil {
+	// 		return nil, "", err
+	// 	}
 
-// 	// sanity checks: is there a volume to attach? is volume already attached?
-// 	if len(volumes) == 0 {
-// 		return nil, "", goof.New("no volume found")
-// 	}
-// 	if len(volumes[0].Attachments) > 0 && !opts.Force {
-// 		return nil, "", goof.New("volume already attached to a host")
-// 	}
-// 	// option to force attachment - detach other volume first
-// 	if opts.Force {
-// 		if _, err := d.VolumeDetach(ctx, volumeID, nil); err != nil {
-// 			return nil, "", err
-// 		}
-// 	}
+	// 	// sanity checks: is there a volume to attach? is volume already attached?
+	// 	if len(volumes) == 0 {
+	// 		return nil, "", goof.New("no volume found")
+	// 	}
+	// 	if len(volumes[0].Attachments) > 0 && !opts.Force {
+	// 		return nil, "", goof.New("volume already attached to a host")
+	// 	}
+	// 	// option to force attachment - detach other volume first
+	// 	if opts.Force {
+	// 		if _, err := d.VolumeDetach(ctx, volumeID, nil); err != nil {
+	// 			return nil, "", err
+	// 		}
+	// 	}
 
-// 	// call helper function
-// 	err = d.attachVolume(ctx, volumeID, "")
-// 	if err != nil {
-// 		return nil, "", goof.WithFieldsE(
-// 			log.Fields{
-// 				"provider": ec2.Name,
-// 				"volumeID": volumeID},
-// 			"error attaching volume",
-// 			err,
-// 		)
-// 	}
+	// 	// call helper function
+	// 	err = d.attachVolume(ctx, volumeID, "")
+	// 	if err != nil {
+	// 		return nil, "", goof.WithFieldsE(
+	// 			log.Fields{
+	// 				"provider": ec2.Name,
+	// 				"volumeID": volumeID},
+	// 			"error attaching volume",
+	// 			err,
+	// 		)
+	// 	}
 
-// 	// check if successful attach
-// 	attachedVol, err := d.VolumeInspect(
-// 		ctx, volumeID, &types.VolumeInspectOpts{
-// 			Attachments: true,
-// 			Opts:        opts.Opts,
-// 		})
-// 	if err != nil {
-// 		return nil, "", goof.WithError("error getting volume", err)
-// 	}
+	// 	// check if successful attach
+	// 	attachedVol, err := d.VolumeInspect(
+	// 		ctx, volumeID, &types.VolumeInspectOpts{
+	// 			Attachments: true,
+	// 			Opts:        opts.Opts,
+	// 		})
+	// 	if err != nil {
+	// 		return nil, "", goof.WithError("error getting volume", err)
+	// 	}
 
-// 	return attachedVol, attachedVol.ID, nil
+	// 	return attachedVol, attachedVol.ID, nil
 }
 
 // VolumeDetach detaches a volume.
@@ -365,44 +364,44 @@ func (d *driver) VolumeDetach(
 	volumeID string,
 	opts *types.VolumeDetachOpts) (*types.Volume, error) {
 	return nil, types.ErrNotImplemented
-// 	// check for errors:
-// 	// no volume ID inputted
-// 	if volumeID == "" {
-// 		return nil, goof.New("missing volume id")
-// 	}
+	// 	// check for errors:
+	// 	// no volume ID inputted
+	// 	if volumeID == "" {
+	// 		return nil, goof.New("missing volume id")
+	// 	}
 
-// 	volumes, err := d.getVolume(ctx, volumeID, "", false)
-// 	if err != nil {
-// 		return nil, err
-// 	}
+	// 	volumes, err := d.getVolume(ctx, volumeID, "", false)
+	// 	if err != nil {
+	// 		return nil, err
+	// 	}
 
-// 	// no volumes to detach
-// 	if len(volumes) == 0 {
-// 		return nil, goof.New("no volume returned")
-// 	}
+	// 	// no volumes to detach
+	// 	if len(volumes) == 0 {
+	// 		return nil, goof.New("no volume returned")
+	// 	}
 
-// 	// volume has no attachments
-// 	if len(volumes[0].Attachments) == 0 {
-// 		return nil, goof.New("volume already detached")
-// 	}
+	// 	// volume has no attachments
+	// 	if len(volumes[0].Attachments) == 0 {
+	// 		return nil, goof.New("volume already detached")
+	// 	}
 
-// 	// TODO put into helper function i.e. detachVolume?
-// 	dvInput := &awsec2.DetachVolumeInput{
-// 		VolumeId: &volumeID,
-// 		Force:    &opts.Force,
-// 	}
+	// 	// TODO put into helper function i.e. detachVolume?
+	// 	dvInput := &awsec2.DetachVolumeInput{
+	// 		VolumeId: &volumeID,
+	// 		Force:    &opts.Force,
+	// 	}
 
-// 	if _, err = d.ec2Instance.DetachVolume(dvInput); err != nil {
-// 		return nil, goof.WithFieldsE(
-// 			log.Fields{
-// 				"provider": ec2.Name,
-// 				"volumeID": volumeID}, "error detaching volume", err)
-// 	}
+	// 	if _, err = d.ec2Instance.DetachVolume(dvInput); err != nil {
+	// 		return nil, goof.WithFieldsE(
+	// 			log.Fields{
+	// 				"provider": ec2.Name,
+	// 				"volumeID": volumeID}, "error detaching volume", err)
+	// 	}
 
-// 	ctx.Info("detached volume", volumeID)
+	// 	ctx.Info("detached volume", volumeID)
 
-// 	return d.VolumeInspect(
-// 		ctx, volumeID, &types.VolumeInspectOpts{Attachments: true})
+	// 	return d.VolumeInspect(
+	// 		ctx, volumeID, &types.VolumeInspectOpts{Attachments: true})
 }
 
 // Snapshots returns all volumes or a filtered list of snapshots.
@@ -721,4 +720,3 @@ func (d *driver) region() string {
 func (d *driver) rexrayTag() string {
 	return d.config.GetString("ec2.rexrayTag")
 }
-

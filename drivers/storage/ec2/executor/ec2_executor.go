@@ -3,10 +3,10 @@ package executor
 import (
 	"bufio"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net/http"
-	"os"
+	"os/exec"
+	"regexp"
 	"strings"
 
 	"github.com/akutz/gofig"
@@ -22,11 +22,6 @@ type driver struct {
 	config         gofig.Config
 	subnetResolver SubnetResolver
 }
-
-const (
-	idDelimiter     = "/"
-	mountinfoFormat = "%d %d %d:%d %s %s %s %s"
-)
 
 func init() {
 	registry.RegisterStorageExecutor(ec2.Name, newDriver)
@@ -56,8 +51,10 @@ func InstanceID() (*types.InstanceID, error) {
 func (d *driver) InstanceID(
 	ctx types.Context,
 	opts types.Store) (*types.InstanceID, error) {
-
-	subnetID, err := d.subnetResolver.ResolveSubnet()
+	/*	iid := &types.InstanceID{Driver: ec2.Name}
+		iid.MarshalMetadata("subnet-c9387cac")
+		return iid, nil
+	*/subnetID, err := d.subnetResolver.ResolveSubnet()
 	if err != nil {
 		return nil, goof.WithError("no ec2metadata subnet id", err)
 	}
@@ -80,71 +77,36 @@ func (d *driver) LocalDevices(
 	ctx types.Context,
 	opts *types.LocalDevicesOpts) (*types.LocalDevices, error) {
 
-	mtt, err := parseMountTable()
+	out, err := exec.Command(
+		"df", "--output=source,target").Output()
 	if err != nil {
-		return nil, err
+		return nil, goof.WithError("error running df", err)
 	}
 
-	idmnt := make(map[string]string)
-	for _, mt := range mtt {
-		idmnt[mt.Source] = mt.MountPoint
+	input := string(out)
+
+	re, _ := regexp.Compile(`^/dev/xvd([a-z])`)
+	localDevices := make(map[string]string)
+
+	scanner := bufio.NewScanner(strings.NewReader(input))
+	// Set the split function for the scanning operation.
+	scanner.Split(bufio.ScanWords)
+
+	var prev string
+	matched := false
+	for scanner.Scan() {
+		temp := scanner.Text()
+		if matched {
+			localDevices[prev] = temp
+		}
+		matched = re.MatchString(temp)
+		prev = temp
 	}
 
 	return &types.LocalDevices{
 		Driver:    ec2.Name,
-		DeviceMap: idmnt,
+		DeviceMap: localDevices,
 	}, nil
-}
-
-func parseMountTable() ([]*types.MountInfo, error) {
-	f, err := os.Open("/proc/self/mountinfo")
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	return parseInfoFile(f)
-}
-
-func parseInfoFile(r io.Reader) ([]*types.MountInfo, error) {
-	var (
-		s   = bufio.NewScanner(r)
-		out = []*types.MountInfo{}
-	)
-
-	for s.Scan() {
-		if err := s.Err(); err != nil {
-			return nil, err
-		}
-
-		var (
-			p              = &types.MountInfo{}
-			text           = s.Text()
-			optionalFields string
-		)
-
-		if _, err := fmt.Sscanf(text, mountinfoFormat,
-			&p.ID, &p.Parent, &p.Major, &p.Minor,
-			&p.Root, &p.MountPoint, &p.Opts, &optionalFields); err != nil {
-			return nil, fmt.Errorf("Scanning '%s' failed: %s", text, err)
-		}
-		// Safe as mountinfo encodes mountpoints with spaces as \040.
-		index := strings.Index(text, " - ")
-		postSeparatorFields := strings.Fields(text[index+3:])
-		if len(postSeparatorFields) < 3 {
-			return nil, fmt.Errorf("Error found less than 3 fields post '-' in %q", text)
-		}
-
-		if optionalFields != "-" {
-			p.Optional = optionalFields
-		}
-
-		p.FSType = postSeparatorFields[0]
-		p.Source = postSeparatorFields[1]
-		p.VFSOpts = strings.Join(postSeparatorFields[2:], " ")
-		out = append(out, p)
-	}
-	return out, nil
 }
 
 // SubnetResolver defines interface that can resolve subnet from environment
@@ -194,4 +156,3 @@ func NewAwsVpcSubnetResolver() *AwsVpcSubnetResolver {
 		ec2MetadataIPAddress: "169.254.169.254",
 	}
 }
-
