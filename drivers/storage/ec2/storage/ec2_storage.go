@@ -6,6 +6,8 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"regexp"
+	"strings"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
@@ -312,61 +314,60 @@ func (d *driver) VolumeAttach(
 	ctx types.Context,
 	volumeID string,
 	opts *types.VolumeAttachOpts) (*types.Volume, string, error) {
-	return nil, "", types.ErrNotImplemented
-	// 	// no volume ID inputted
-	// 	if volumeID == "" {
-	// 		return nil, "", goof.New("missing volume id")
-	// 	}
-	// 	/*
-	// 		nextDeviceName, err := d.GetDeviceNextAvailable()
-	// 		if err != nil {
-	// 			return nil, err
-	// 		}*/
+	// no volume ID inputted
+	if volumeID == "" {
+		return nil, "", goof.New("missing volume id")
+	}
+	nextDeviceName, err := d.GetDeviceNextAvailable()
+	if err != nil {
+		return nil, "", err
+	}
 
-	// 	// review volume with attachments to any host
-	// 	volumes, err := d.getVolume(ctx, volumeID, "", false)
+	// review volume with attachments to any host
+	ec2vols, err := d.getVolume(ctx, volumeID, "", false)
 	//TODO convert to types.Volume
-	// 	if err != nil {
-	// 		return nil, "", err
-	// 	}
+	volumes := d.convertToTypesVolume(ec2vols, true)
+	if err != nil {
+		return nil, "", goof.WithError("Error getting volume", err)
+	}
 
-	// 	// sanity checks: is there a volume to attach? is volume already attached?
-	// 	if len(volumes) == 0 {
-	// 		return nil, "", goof.New("no volume found")
-	// 	}
-	// 	if len(volumes[0].Attachments) > 0 && !opts.Force {
-	// 		return nil, "", goof.New("volume already attached to a host")
-	// 	}
-	// 	// option to force attachment - detach other volume first
-	// 	if opts.Force {
-	// 		if _, err := d.VolumeDetach(ctx, volumeID, nil); err != nil {
-	// 			return nil, "", err
-	// 		}
-	// 	}
+	// sanity checks: is there a volume to attach? is volume already attached?
+	if len(volumes) == 0 {
+		return nil, "", goof.New("no volume found")
+	}
+	if len(volumes[0].Attachments) > 0 && !opts.Force {
+		return nil, "", goof.New("volume already attached to a host")
+	}
+	// TODO option to force attachment - detach other volume first
+	/*if opts.Force {
+		if _, err := d.VolumeDetach(ctx, volumeID, nil); err != nil {
+			return nil, "", err
+		}
+	}*/
 
-	// 	// call helper function
-	// 	err = d.attachVolume(ctx, volumeID, "")
-	// 	if err != nil {
-	// 		return nil, "", goof.WithFieldsE(
-	// 			log.Fields{
-	// 				"provider": ec2.Name,
-	// 				"volumeID": volumeID},
-	// 			"error attaching volume",
-	// 			err,
-	// 		)
-	// 	}
+	// call helper function
+	err = d.attachVolume(ctx, volumeID, volumes[0].Name, nextDeviceName)
+	if err != nil {
+		return nil, "", goof.WithFieldsE(
+			log.Fields{
+				"provider": ec2.Name,
+				"volumeID": volumeID},
+			"error attaching volume",
+			err,
+		)
+	}
 
-	// 	// check if successful attach
-	// 	attachedVol, err := d.VolumeInspect(
-	// 		ctx, volumeID, &types.VolumeInspectOpts{
-	// 			Attachments: true,
-	// 			Opts:        opts.Opts,
-	// 		})
-	// 	if err != nil {
-	// 		return nil, "", goof.WithError("error getting volume", err)
-	// 	}
+	// check if successful attach
+	attachedVol, err := d.VolumeInspect(
+		ctx, volumeID, &types.VolumeInspectOpts{
+			Attachments: true,
+			Opts:        opts.Opts,
+		})
+	if err != nil {
+		return nil, "", goof.WithError("error getting volume", err)
+	}
 
-	// 	return attachedVol, attachedVol.ID, nil
+	return attachedVol, attachedVol.ID, nil
 }
 
 // VolumeDetach detaches a volume.
@@ -538,30 +539,30 @@ func (d *driver) convertToTypesVolume(
 
 // Used in VolumeAttach
 func (d *driver) attachVolume(
-	ctx types.Context, volumeID, volumeName string) error {
-	return types.ErrNotImplemented
-	/* TODO sanity check # of volumes to attach?
-	medium, err := d.vbox.GetMedium(volumeID, volumeName)
+	ctx types.Context, volumeID, volumeName, deviceName string) error {
+	// sanity check # of volumes to attach
+	vol, err := d.getVolume(ctx, volumeID, volumeName, false)
 	if err != nil {
-		return err
+		return goof.WithError("Error getting volume", err)
 	}
 
-	if len(medium) == 0 {
+	if len(vol) == 0 {
 		return goof.New("no volume returned")
 	}
-	if len(medium) > 1 {
+	if len(vol) > 1 {
 		return goof.New("too many volumes returned")
 	}
-	*/
 
-	// avInput := &awsec2.AttachVolumeInput{
-	// 	InstanceId: &d.instanceDocument.InstanceID,
-	// 	VolumeId:   &volumeID,
-	// }
-	// if _, err := d.ec2Instance.AttachVolume(avInput); err != nil {
-	// 	return err
-	// }
-	// return nil
+	fmt.Println(deviceName)
+	avInput := &awsec2.AttachVolumeInput{
+		Device:     &deviceName,
+		InstanceId: &d.instanceDocument.InstanceID,
+		VolumeId:   &volumeID,
+	}
+	if _, err := d.ec2Instance.AttachVolume(avInput); err != nil {
+		return err
+	}
+	return nil
 }
 
 func getInstanceIdentityDocument() (*instanceIdentityDocument, error) {
@@ -591,6 +592,105 @@ func getInstanceIdentityDocument() (*instanceIdentityDocument, error) {
 	}
 
 	return &document, nil
+}
+
+func (d *driver) GetDeviceNextAvailable() (string, error) {
+	letters := []string{
+		"a", "b", "c", "d", "e", "f", "g", "h",
+		"i", "j", "k", "l", "m", "n", "o", "p"}
+
+	blockDeviceNames := make(map[string]bool)
+
+	blockDeviceMapping, err := d.GetVolumeMapping()
+	if err != nil {
+		return "", err
+	}
+
+	for _, blockDevice := range blockDeviceMapping {
+		re, _ := regexp.Compile(`^/dev/xvd([a-z])`)
+		res := re.FindStringSubmatch(blockDevice.Name)
+		if len(res) > 0 {
+			blockDeviceNames[res[1]] = true
+		}
+	}
+
+	localDevices, err := getLocalDevices()
+	if err != nil {
+		return "", err
+	}
+
+	for _, localDevice := range localDevices {
+		re, _ := regexp.Compile(`^xvd([a-z])`)
+		res := re.FindStringSubmatch(localDevice)
+		if len(res) > 0 {
+			blockDeviceNames[res[1]] = true
+		}
+	}
+
+	for _, letter := range letters {
+		if !blockDeviceNames[letter] {
+			nextDeviceName := "/dev/xvd" + letter
+			log.WithFields(log.Fields{
+				"driverName":     d.Name(),
+				"nextDeviceName": nextDeviceName}).Info("got next device name")
+			return nextDeviceName, nil
+		}
+	}
+	return "", goof.New("No available device")
+}
+
+func getLocalDevices() (deviceNames []string, err error) {
+	file := "/proc/partitions"
+	contentBytes, err := ioutil.ReadFile(file)
+	if err != nil {
+		return []string{}, err
+	}
+
+	content := string(contentBytes)
+
+	lines := strings.Split(content, "\n")
+	for _, line := range lines[2:] {
+		fields := strings.Fields(line)
+		if len(fields) == 4 {
+			deviceNames = append(deviceNames, fields[3])
+		}
+	}
+
+	return deviceNames, nil
+}
+
+func (d *driver) GetVolumeMapping() ([]*types.VolumeDevice, error) {
+	blockDevices, err := d.getBlockDevices(d.instanceDocument.InstanceID)
+	if err != nil {
+		return nil, goof.WithError("Error getting block devices", err)
+	}
+
+	var BlockDevices []*types.VolumeDevice
+	for _, blockDevice := range blockDevices {
+		sdBlockDevice := &types.VolumeDevice{
+			ProviderName: d.Name(),
+			InstanceID:   &types.InstanceID{ID: d.instanceDocument.InstanceID, Driver: ec2.Name},
+			//InstanceID:   d.instanceDocument.InstanceID,
+			Region:   d.instanceDocument.Region,
+			Name:     *blockDevice.DeviceName,
+			VolumeID: *((*blockDevice.Ebs).VolumeId),
+			Status:   *((*blockDevice.Ebs).Status),
+		}
+		BlockDevices = append(BlockDevices, sdBlockDevice)
+	}
+
+	// log.Println("Got Block Device Mappings: " + fmt.Sprintf("%+v", BlockDevices))
+	return BlockDevices, nil
+}
+
+func (d *driver) getBlockDevices(instanceID string) ([]*awsec2.InstanceBlockDeviceMapping, error) {
+
+	instance, err := d.getInstance()
+	if err != nil {
+		return nil, goof.WithError("Error getting instance", err)
+	}
+
+	return instance.BlockDeviceMappings, nil
 }
 
 func (d *driver) createVolume(ctx types.Context, volumeName string,
