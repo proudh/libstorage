@@ -28,8 +28,9 @@ ec2:
   tag: integrationtest
   region: us-west-2
   securityGroups: minecraft-server-group
-  accessKey: ` + os.Getenv("AWS_ACCESS_KEY_ID") + `
-  secretKey: ` + os.Getenv("AWS_SECRET_ACCESS_KEY"))
+//  rexrayTag: rexraySet
+//  accessKey: ` + os.Getenv("AWS_ACCESS_KEY_ID") + `
+//  secretKey: ` + os.Getenv("AWS_SECRET_ACCESS_KEY"))
 )
 
 var volumeName string
@@ -101,7 +102,7 @@ func TestInstanceID(t *testing.T) {
 
 // same everywhere
 func TestServices(t *testing.T) {
-	/*if skipTests() {
+	if skipTests() {
 		t.SkipNow()
 	}
 
@@ -114,41 +115,37 @@ func TestServices(t *testing.T) {
 		assert.True(t, ok)
 	}
 	apitests.Run(t, ec2.Name, configYAML, tf)
-	*/
 }
 
 //same everywhere
 func volumeCreate(
 	t *testing.T, client types.Client, volumeName string) *types.Volume {
-	return nil
-	/*
-		log.WithField("volumeName", volumeName).Info("creating volume")
-		size := int64(8)
+	log.WithField("volumeName", volumeName).Info("creating volume")
+	size := int64(8)
 
-		opts := map[string]interface{}{
-			"priority": 2,
-			"owner":    "root@example.com",
-		}
+	opts := map[string]interface{}{
+		"priority": 2,
+		"owner":    "root@example.com",
+	}
 
-		volumeCreateRequest := &types.VolumeCreateRequest{
-			Name: volumeName,
-			Size: &size,
-			Opts: opts,
-		}
+	volumeCreateRequest := &types.VolumeCreateRequest{
+		Name: volumeName,
+		Size: &size,
+		Opts: opts,
+	}
 
-		reply, err := client.API().VolumeCreate(nil, ec2.Name, volumeCreateRequest)
-		assert.NoError(t, err)
-		if err != nil {
-			//TODO can do t.Fatal("failed volumeCreate") instead?
-			t.FailNow()
-			t.Error("failed volumeCreate")
-		}
-		apitests.LogAsJSON(reply, t)
+	reply, err := client.API().VolumeCreate(nil, ec2.Name, volumeCreateRequest)
+	assert.NoError(t, err)
+	if err != nil {
+		//TODO can do t.Fatal("failed volumeCreate") instead?
+		t.FailNow()
+		t.Error("failed volumeCreate")
+	}
+	apitests.LogAsJSON(reply, t)
 
-		assert.Equal(t, volumeName, reply.Name)
-		assert.Equal(t, size, reply.Size)
-		return reply
-	*/
+	assert.Equal(t, volumeName, reply.Name)
+	assert.Equal(t, size, reply.Size)
+	return reply
 }
 
 // same everywhere
@@ -377,8 +374,9 @@ func TestVolumeInspect(t *testing.T) {
 		t.SkipNow()
 	}
 	tf := func(config gofig.Config, client types.Client, t *testing.T) {
-		_ = volumeByName(t, client, "mc-server-volume")
-		_ = volumeInspect(t, client, "vol-992ca510")
+		_ = volumeCreate(t, client, "ls-test-vol-ph")
+		//	_ = volumeByName(t, client, "mc-server-volume")
+		//	_ = volumeInspect(t, client, "vol-992ca510")
 	}
 	apitests.Run(t, ec2.Name, configYAML, tf)
 }

@@ -31,8 +31,8 @@ type driver struct {
 	config           gofig.Config
 	instanceDocument *instanceIdentityDocument
 	ec2Instance      *awsec2.EC2
-	ec2Tag           string
-	awsCreds         *credentials.Credentials
+	//	ec2Tag           string
+	awsCreds *credentials.Credentials
 }
 
 type instanceIdentityDocument struct {
@@ -101,7 +101,7 @@ func (d *driver) Init(context types.Context, config gofig.Config) error {
 		endpoint = "ec2.us-west-2.amazonaws.com"
 	}
 
-	d.ec2Tag = d.rexrayTag()
+	//	d.ec2Tag = d.rexrayTag()
 
 	mySession := session.New()
 
@@ -168,7 +168,9 @@ func (d *driver) Volumes(
 	ctx types.Context,
 	opts *types.VolumesOpts) ([]*types.Volume, error) {
 	// Get all volumes (and their attachments if specified)
-	vols, err := d.getVolume(ctx, "", "", opts.Attachments)
+	ec2vols, err := d.getVolume(ctx, "", "", opts.Attachments)
+	//TODO convert to types.Volume
+	vols := d.convertToTypesVolume(ec2vols, opts.Attachments)
 	if err != nil {
 		return nil, err
 	}
@@ -181,7 +183,10 @@ func (d *driver) VolumeInspect(
 	volumeID string,
 	opts *types.VolumeInspectOpts) (*types.Volume, error) {
 	// Get volume corresponding to volume ID
-	vols, err := d.getVolume(ctx, volumeID, "", opts.Attachments)
+	ec2vols, err := d.getVolume(ctx, volumeID, "", opts.Attachments)
+	//TODO convert to types.Volume
+	vols := d.convertToTypesVolume(ec2vols, opts.Attachments)
+
 	if err != nil {
 		return nil, err
 	}
@@ -197,9 +202,7 @@ func (d *driver) VolumeInspect(
 // VolumeCreate creates a new volume.
 func (d *driver) VolumeCreate(ctx types.Context, volumeName string,
 	opts *types.VolumeCreateOpts) (*types.Volume, error) {
-	return nil, types.ErrNotImplemented
-
-	/*fields := map[string]interface{}{
+	fields := map[string]interface{}{
 		"volumeName": volumeName,
 		"opts":       opts,
 	}
@@ -207,7 +210,9 @@ func (d *driver) VolumeCreate(ctx types.Context, volumeName string,
 	log.WithFields(fields).Debug("creating volume")
 
 	// check if volume with same name exists
-	volumes, err := d.getVolume(ctx, "", volumeName, false)
+	ec2vols, err := d.getVolume(ctx, "", volumeName, false)
+	//TODO convert to types.Volume
+	volumes := d.convertToTypesVolume(ec2vols, false)
 	if err != nil {
 		return nil, err
 	}
@@ -240,11 +245,10 @@ func (d *driver) VolumeCreate(ctx types.Context, volumeName string,
 	if err != nil {
 		return nil, err
 	}
-
 	// return the volume created
 	return d.VolumeInspect(ctx, *vol.VolumeId, &types.VolumeInspectOpts{
 		Attachments: true,
-	})*/
+	})
 }
 
 // VolumeCreateFromSnapshot creates a new volume from an existing snapshot.
@@ -321,6 +325,7 @@ func (d *driver) VolumeAttach(
 
 	// 	// review volume with attachments to any host
 	// 	volumes, err := d.getVolume(ctx, volumeID, "", false)
+	//TODO convert to types.Volume
 	// 	if err != nil {
 	// 		return nil, "", err
 	// 	}
@@ -377,6 +382,7 @@ func (d *driver) VolumeDetach(
 	// 	}
 
 	// 	volumes, err := d.getVolume(ctx, volumeID, "", false)
+	//TODO convert to types.Volume
 	// 	if err != nil {
 	// 		return nil, err
 	// 	}
@@ -452,7 +458,7 @@ func (d *driver) SnapshotRemove(
 func (d *driver) getVolume(
 	ctx types.Context,
 	volumeID string, volumeName string,
-	attachments bool) ([]*types.Volume, error) {
+	attachments bool) ([]*awsec2.Volume, error) {
 	filters := []*awsec2.Filter{}
 	if volumeName != "" {
 		filters = append(filters, &awsec2.Filter{
@@ -464,12 +470,12 @@ func (d *driver) getVolume(
 			Name: aws.String("volume-id"), Values: []*string{&volumeID}})
 	}
 
-	if d.ec2Tag != "" {
-		filters = append(filters, &awsec2.Filter{
-			Name:   aws.String(fmt.Sprintf("tag:%s", d.rexrayTag())),
-			Values: []*string{&d.ec2Tag}})
-	}
-
+	/*	if d.ec2Tag != "" {
+			filters = append(filters, &awsec2.Filter{
+				Name:   aws.String(fmt.Sprintf("tag:%s", d.rexrayTag())),
+				Values: []*string{&d.ec2Tag}})
+		}
+	*/
 	// Prepare input
 	dvInput := &awsec2.DescribeVolumesInput{}
 
@@ -484,14 +490,17 @@ func (d *driver) getVolume(
 
 	resp, err := d.ec2Instance.DescribeVolumes(dvInput)
 	if err != nil {
-		return []*types.Volume{}, err
+		return []*awsec2.Volume{}, err
 	}
 
-	// TODO update fields?
 	volumes := resp.Volumes
+	return volumes, nil
+}
 
+func (d *driver) convertToTypesVolume(
+	ec2vols []*awsec2.Volume, attachments bool) []*types.Volume {
 	var volumesSD []*types.Volume
-	for _, volume := range volumes {
+	for _, volume := range ec2vols {
 		var attachmentsSD []*types.VolumeAttachment
 		name := getName(volume.Tags)
 
@@ -524,7 +533,7 @@ func (d *driver) getVolume(
 		}
 		volumesSD = append(volumesSD, volumeSD)
 	}
-	return volumesSD, nil
+	return volumesSD
 }
 
 // Used in VolumeAttach
@@ -586,104 +595,109 @@ func getInstanceIdentityDocument() (*instanceIdentityDocument, error) {
 
 func (d *driver) createVolume(ctx types.Context, volumeName string,
 	vol *types.Volume) (*awsec2.Volume, error) {
-	return nil, types.ErrNotImplemented
-	// var err error
+	var err error
 
-	// var server awsec2.Instance
-	// if server, err = d.getInstance(); err != nil {
-	// 	return &awsec2.Volume{}, err
-	// }
+	var server awsec2.Instance
+	if server, err = d.getInstance(); err != nil {
+		return &awsec2.Volume{}, err
+	}
 
-	// d.createVolumeEnsureAvailabilityZone(&vol.AvailabilityZone, &server)
+	d.createVolumeEnsureAvailabilityZone(&vol.AvailabilityZone, &server)
 
-	// options := &awsec2.CreateVolumeInput{
-	// 	Size:             &vol.Size,
-	// 	AvailabilityZone: &vol.AvailabilityZone,
-	// 	VolumeType:       &vol.Type,
-	// }
+	options := &awsec2.CreateVolumeInput{
+		Size:             &vol.Size,
+		AvailabilityZone: &vol.AvailabilityZone,
+		VolumeType:       &vol.Type,
+	}
 
-	// if vol.IOPS > 0 {
-	// 	options.Iops = &vol.IOPS
-	// }
+	if vol.IOPS > 0 {
+		options.Iops = &vol.IOPS
+	}
+	var resp *awsec2.Volume
 
-	// var resp *awsec2.Volume
-	// if resp, err = d.ec2Instance.CreateVolume(options); err != nil {
-	// 	return &awsec2.Volume{}, err
-	// }
+	if resp, err = d.ec2Instance.CreateVolume(options); err != nil {
+		return &awsec2.Volume{}, goof.WithError("Error creating volume", err)
+	}
 
-	// if err = d.createVolumeCreateTags(volumeName, resp); err != nil {
-	// 	return &awsec2.Volume{}, err
-	// }
+	if err = d.createVolumeCreateTags(volumeName, resp); err != nil {
+		return &awsec2.Volume{}, goof.WithError("Error creating tags", err)
+	}
 
-	// if err = d.waitVolumeComplete(resp); err != nil {
-	// 	return &awsec2.Volume{}, err
-	// }
-
-	// return resp, nil
+	if err = d.waitVolumeComplete(ctx, *resp.VolumeId); err != nil {
+		return &awsec2.Volume{}, goof.WithError("Error waiting for volume creation", err)
+	}
+	return resp, nil
 }
 
 func (d *driver) createVolumeEnsureAvailabilityZone(
 	availabilityZone *string, server *awsec2.Instance) {
-	// if *availabilityZone == "" {
-	// 	*availabilityZone = *server.Placement.AvailabilityZone
-	// }
+	if *availabilityZone == "" {
+		*availabilityZone = *server.Placement.AvailabilityZone
+	}
 }
 
 func (d *driver) createVolumeCreateTags(
 	volumeName string, resp *awsec2.Volume) (err error) {
-	return types.ErrNotImplemented
-	// if volumeName == "" && d.ec2Tag == "" {
-	// 	return
-	// }
+	/*	if volumeName == "" && d.ec2Tag == "" {
+			return
+		}
+	*/
+	var ctInput *awsec2.CreateTagsInput
+	initCTInput := func() {
+		if ctInput != nil {
+			return
+		}
+		ctInput = &awsec2.CreateTagsInput{
+			Resources: []*string{resp.VolumeId},
+			Tags:      []*awsec2.Tag{},
+		}
+	}
 
-	// var ctInput *awsec2.CreateTagsInput
-	// initCTInput := func() {
-	// 	if ctInput != nil {
-	// 		return
-	// 	}
-	// 	ctInput = &awsec2.CreateTagsInput{
-	// 		Resources: []*string{resp.VolumeId},
-	// 		Tags:      []*awsec2.Tag{},
-	// 	}
-	// }
+	if volumeName != "" {
+		initCTInput()
+		ctInput.Tags = append(
+			ctInput.Tags,
+			&awsec2.Tag{
+				Key:   aws.String("Name"),
+				Value: &volumeName,
+			})
+	}
 
-	// if volumeName != "" {
-	// 	initCTInput()
-	// 	ctInput.Tags = append(
-	// 		ctInput.Tags,
-	// 		&awsec2.Tag{
-	// 			Key:   aws.String("Name"),
-	// 			Value: &volumeName,
-	// 		})
-	// }
-
-	// if d.ec2Tag != "" {
-	// 	initCTInput()
-	// 	ctInput.Tags = append(
-	// 		ctInput.Tags,
-	// 		&awsec2.Tag{
-	// 			Key:   aws.String(d.rexrayTag()),
-	// 			Value: &d.ec2Tag,
-	// 		})
-	// }
-
-	// _, err = d.ec2Instance.CreateTags(ctInput)
-	// if err != nil {
-	// 	return err
-	// }
-	// return nil
+	/*	if d.ec2Tag != "" {
+			initCTInput()
+			ctInput.Tags = append(
+				ctInput.Tags,
+				&awsec2.Tag{
+					Key:   aws.String(d.rexrayTag()),
+					Value: &d.ec2Tag,
+				})
+		}
+	*/
+	_, err = d.ec2Instance.CreateTags(ctInput)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
-func (d *driver) waitVolumeComplete(resp *awsec2.Volume) error {
-	return types.ErrNotImplemented
-	// for {
-	// 	if *resp.State == awsec2.VolumeStateAvailable {
-	// 		break
-	// 	}
-	// 	time.Sleep(1 * time.Second)
-	// }
+func (d *driver) waitVolumeComplete(ctx types.Context, volumeID string) error {
+	if volumeID == "" {
+		return goof.New("Missing volume ID")
+	}
 
-	// return nil
+	for {
+		volumes, err := d.getVolume(ctx, volumeID, "", false)
+		if err != nil {
+			return goof.WithError("Error getting volume", err)
+		}
+
+		if *volumes[0].State == awsec2.VolumeStateAvailable {
+			break
+		}
+		time.Sleep(1 * time.Second)
+	}
+
+	return nil
 }
 
 func getName(tags []*awsec2.Tag) string {
@@ -696,17 +710,15 @@ func getName(tags []*awsec2.Tag) string {
 }
 
 func (d *driver) getInstance() (awsec2.Instance, error) {
-	return awsec2.Instance{}, types.ErrNotImplemented
+	diInput := &awsec2.DescribeInstancesInput{
+		InstanceIds: []*string{&d.instanceDocument.InstanceID},
+	}
+	resp, err := d.ec2Instance.DescribeInstances(diInput)
+	if err != nil {
+		return awsec2.Instance{}, err
+	}
 
-	// diInput := &awsec2.DescribeInstancesInput{
-	// 	InstanceIds: []*string{&d.instanceDocument.InstanceID},
-	// }
-	// resp, err := d.ec2Instance.DescribeInstances(diInput)
-	// if err != nil {
-	// 	return awsec2.Instance{}, err
-	// }
-
-	// return *resp.Reservations[0].Instances[0], nil
+	return *resp.Reservations[0].Instances[0], nil
 }
 
 func (d *driver) accessKey() string {
@@ -721,6 +733,6 @@ func (d *driver) region() string {
 	return d.config.GetString("ec2.region")
 }
 
-func (d *driver) rexrayTag() string {
+/*func (d *driver) rexrayTag() string {
 	return d.config.GetString("ec2.rexrayTag")
-}
+}*/
