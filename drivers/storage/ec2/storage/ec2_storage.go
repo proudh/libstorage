@@ -71,7 +71,8 @@ func (d *driver) Init(context types.Context, config gofig.Config) error {
 	// Initialize with config content
 	fields := map[string]interface{}{
 		"moduleName": d.Name(),
-		"accessKey":  d.accessKey(),
+		//		"accessKey":  os.Getenv("AWS_ACCESS_KEY_ID"),
+		"accessKey": d.accessKey(),
 	}
 
 	log.WithFields(fields).Debug("starting provider driver")
@@ -94,6 +95,12 @@ func (d *driver) Init(context types.Context, config gofig.Config) error {
 		region = d.instanceDocument.Region
 	}
 
+	var endpoint string
+	//endpoint := d.endpoint()
+	if endpoint == "" {
+		endpoint = "ec2.us-west-2.amazonaws.com"
+	}
+
 	d.ec2Tag = d.rexrayTag()
 
 	mySession := session.New()
@@ -101,6 +108,7 @@ func (d *driver) Init(context types.Context, config gofig.Config) error {
 	d.awsCreds = credentials.NewChainCredentials(
 		[]credentials.Provider{
 			&credentials.StaticProvider{Value: credentials.Value{AccessKeyID: d.accessKey(), SecretAccessKey: d.secretKey()}},
+			//	&credentials.StaticProvider{Value: credentials.Value{AccessKeyID: os.Getenv("AWS_ACCESS_KEY_ID"), SecretAccessKey: os.Getenv("AWS_SECRET_ACCESS_KEY")}},
 			&credentials.EnvProvider{},
 			&credentials.SharedCredentialsProvider{},
 			&ec2rolecreds.EC2RoleProvider{
@@ -108,7 +116,7 @@ func (d *driver) Init(context types.Context, config gofig.Config) error {
 			},
 		})
 
-	awsConfig := aws.NewConfig().WithCredentials(d.awsCreds).WithRegion(region)
+	awsConfig := aws.NewConfig().WithCredentials(d.awsCreds).WithRegion(region).WithEndpoint(endpoint)
 
 	d.ec2Instance = awsec2.New(mySession, awsConfig)
 
@@ -159,13 +167,12 @@ func (d *driver) InstanceInspect(
 func (d *driver) Volumes(
 	ctx types.Context,
 	opts *types.VolumesOpts) ([]*types.Volume, error) {
-	return nil, types.ErrNotImplemented
 	// Get all volumes (and their attachments if specified)
-	/*	vols, err := d.getVolume(ctx, "", "", opts.Attachments)
-		if err != nil {
-			return nil, err
-		}
-		return vols, nil*/
+	vols, err := d.getVolume(ctx, "", "", opts.Attachments)
+	if err != nil {
+		return nil, err
+	}
+	return vols, nil
 }
 
 // VolumeInspect inspects a single volume.
@@ -173,9 +180,8 @@ func (d *driver) VolumeInspect(
 	ctx types.Context,
 	volumeID string,
 	opts *types.VolumeInspectOpts) (*types.Volume, error) {
-	return nil, types.ErrNotImplemented
 	// Get volume corresponding to volume ID
-	/*vols, err := d.getVolume(ctx, volumeID, "", opts.Attachments)
+	vols, err := d.getVolume(ctx, volumeID, "", opts.Attachments)
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +191,7 @@ func (d *driver) VolumeInspect(
 
 	// Because getVolume returns an array
 	// and we only expect the 1st element to be a match, return 1st element
-	return vols[0], nil*/
+	return vols[0], nil
 }
 
 // VolumeCreate creates a new volume.
@@ -447,80 +453,78 @@ func (d *driver) getVolume(
 	ctx types.Context,
 	volumeID string, volumeName string,
 	attachments bool) ([]*types.Volume, error) {
-	return nil, types.ErrNotImplemented
-	// Add filters using parameters if specified
-	// filters := []*awsec2.Filter{}
-	// if volumeName != "" {
-	// 	filters = append(filters, &awsec2.Filter{
-	// 		Name: aws.String("tag:Name"), Values: []*string{&volumeName}})
-	// }
+	filters := []*awsec2.Filter{}
+	if volumeName != "" {
+		filters = append(filters, &awsec2.Filter{
+			Name: aws.String("tag:Name"), Values: []*string{&volumeName}})
+	}
 
-	// if volumeID != "" {
-	// 	filters = append(filters, &awsec2.Filter{
-	// 		Name: aws.String("volume-id"), Values: []*string{&volumeID}})
-	// }
+	if volumeID != "" {
+		filters = append(filters, &awsec2.Filter{
+			Name: aws.String("volume-id"), Values: []*string{&volumeID}})
+	}
 
-	// if d.ec2Tag != "" {
-	// 	filters = append(filters, &awsec2.Filter{
-	// 		Name:   aws.String(fmt.Sprintf("tag:%s", d.rexrayTag())),
-	// 		Values: []*string{&d.ec2Tag}})
-	// }
+	if d.ec2Tag != "" {
+		filters = append(filters, &awsec2.Filter{
+			Name:   aws.String(fmt.Sprintf("tag:%s", d.rexrayTag())),
+			Values: []*string{&d.ec2Tag}})
+	}
 
-	// // Prepare input
-	// dvInput := &awsec2.DescribeVolumesInput{}
+	// Prepare input
+	dvInput := &awsec2.DescribeVolumesInput{}
 
-	// // Apply filters if parameters are specified
-	// if len(filters) > 0 {
-	// 	dvInput.Filters = filters
-	// }
+	// Apply filters if parameters are specified
+	if len(filters) > 0 {
+		dvInput.Filters = filters
+	}
 
-	// if volumeID != "" {
-	// 	dvInput.VolumeIds = []*string{&volumeID}
-	// }
+	if volumeID != "" {
+		dvInput.VolumeIds = []*string{&volumeID}
+	}
 
-	// resp, err := d.ec2Instance.DescribeVolumes(dvInput)
-	// if err != nil {
-	// 	return []*types.Volume{}, err
-	// }
+	resp, err := d.ec2Instance.DescribeVolumes(dvInput)
+	if err != nil {
+		return []*types.Volume{}, err
+	}
 
-	// // TODO update fields?
-	// volumes := resp.Volumes
+	// TODO update fields?
+	volumes := resp.Volumes
 
-	// var volumesSD []*types.Volume
-	// for _, volume := range volumes {
-	// 	var attachmentsSD []*types.VolumeAttachment
-	// 	name := getName(volume.Tags)
+	var volumesSD []*types.Volume
+	for _, volume := range volumes {
+		var attachmentsSD []*types.VolumeAttachment
+		name := getName(volume.Tags)
 
-	// 	volumeSD := &types.Volume{
-	// 		Name:             name,
-	// 		ID:               *volume.VolumeId,
-	// 		AvailabilityZone: *volume.AvailabilityZone,
-	// 		Status:           *volume.State,
-	// 		Type:             *volume.VolumeType,
-	// 		Size:             *volume.Size,
-	// 	}
-	// 	if attachments {
-	// 		for _, attachment := range volume.Attachments {
-	// 			attachmentSD := &types.VolumeAttachment{
-	// 				VolumeID:   *attachment.VolumeId,
-	// 				InstanceID: &types.InstanceID{ID: *attachment.InstanceId, Driver: ec2.Name},
-	// 				DeviceName: *attachment.Device,
-	// 				Status:     *attachment.State,
-	// 			}
-	// 			attachmentsSD = append(attachmentsSD, attachmentSD)
-	// 		}
+		volumeSD := &types.Volume{
+			Name:             name,
+			ID:               *volume.VolumeId,
+			AvailabilityZone: *volume.AvailabilityZone,
+			Status:           *volume.State,
+			Type:             *volume.VolumeType,
+			Size:             *volume.Size,
+		}
+		if attachments {
+			for _, attachment := range volume.Attachments {
+				attachmentSD := &types.VolumeAttachment{
+					VolumeID:   *attachment.VolumeId,
+					InstanceID: &types.InstanceID{ID: *attachment.InstanceId, Driver: ec2.Name},
+					DeviceName: *attachment.Device,
+					Status:     *attachment.State,
+				}
+				attachmentsSD = append(attachmentsSD, attachmentSD)
+			}
 
-	// 		if len(attachmentsSD) > 0 {
-	// 			volumeSD.Attachments = attachmentsSD
-	// 		}
-	// 	}
-	// 	// Some volume types have no IOPS, so we get nil in volume.Iops
-	// 	if volume.Iops != nil {
-	// 		volumeSD.IOPS = *volume.Iops
-	// 	}
-	// 	volumesSD = append(volumesSD, volumeSD)
-	// }
-	// return volumesSD, nil
+			if len(attachmentsSD) > 0 {
+				volumeSD.Attachments = attachmentsSD
+			}
+		}
+		// Some volume types have no IOPS, so we get nil in volume.Iops
+		if volume.Iops != nil {
+			volumeSD.IOPS = *volume.Iops
+		}
+		volumesSD = append(volumesSD, volumeSD)
+	}
+	return volumesSD, nil
 }
 
 // Used in VolumeAttach
@@ -683,11 +687,11 @@ func (d *driver) waitVolumeComplete(resp *awsec2.Volume) error {
 }
 
 func getName(tags []*awsec2.Tag) string {
-	// for _, tag := range tags {
-	// 	if *tag.Key == "Name" {
-	// 		return *tag.Value
-	// 	}
-	// }
+	for _, tag := range tags {
+		if *tag.Key == "Name" {
+			return *tag.Value
+		}
+	}
 	return ""
 }
 

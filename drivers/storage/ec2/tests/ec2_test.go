@@ -1,7 +1,7 @@
 package ec2
 
 import (
-	"fmt"
+	//	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -24,11 +24,12 @@ import (
 // Put contents of sample config.yml here
 var (
 	configYAML = []byte(`
-sefs:
+ec2:
   tag: integrationtest
-  region: us-west-2a
+  region: us-west-2
   securityGroups: minecraft-server-group
-`)
+  accessKey: ` + os.Getenv("AWS_ACCESS_KEY_ID") + `
+  secretKey: ` + os.Getenv("AWS_SECRET_ACCESS_KEY"))
 )
 
 var volumeName string
@@ -79,7 +80,6 @@ func TestInstanceID(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// TODO what is WithValue, utils.NewStore()
 	// Fill in Instance ID's ID field with InstanceInspect
 	ctx = ctx.WithValue(context.InstanceIDKey, iid)
 	i, err := sd.InstanceInspect(ctx, utils.NewStore())
@@ -88,7 +88,6 @@ func TestInstanceID(t *testing.T) {
 	}
 
 	iid = i.InstanceID
-	fmt.Println(iid)
 
 	// test resulting InstanceID
 	apitests.Run(
@@ -97,23 +96,24 @@ func TestInstanceID(t *testing.T) {
 			Driver:   ec2.Name,
 			Expected: iid,
 		}).Test)
+
 }
 
 // same everywhere
 func TestServices(t *testing.T) {
-	/*	if skipTests() {
-			t.SkipNow()
-		}
+	/*if skipTests() {
+		t.SkipNow()
+	}
 
-		tf := func(config gofig.Config, client types.Client, t *testing.T) {
-			reply, err := client.API().Services(nil)
-			assert.NoError(t, err)
-			assert.Equal(t, len(reply), 1)
+	tf := func(config gofig.Config, client types.Client, t *testing.T) {
+		reply, err := client.API().Services(nil)
+		assert.NoError(t, err)
+		assert.Equal(t, len(reply), 1)
 
-			_, ok := reply[ec2.Name]
-			assert.True(t, ok)
-		}
-		apitests.Run(t, ec2.Name, configYAML, tf)
+		_, ok := reply[ec2.Name]
+		assert.True(t, ok)
+	}
+	apitests.Run(t, ec2.Name, configYAML, tf)
 	*/
 }
 
@@ -154,25 +154,21 @@ func volumeCreate(
 // same everywhere
 func volumeByName(
 	t *testing.T, client types.Client, volumeName string) *types.Volume {
-	return nil
-	/*
-		log.WithField("volumeName", volumeName).Info("get volume byec2.Name")
-		vols, err := client.API().Volumes(nil, false)
-		assert.NoError(t, err)
-		if err != nil {
-			t.FailNow()
-		}
-		assert.Contains(t, vols, ec2.Name)
-		for _, vol := range vols[ec2.Name] {
-			if vol.Name == volumeName {
-				return vol
-			}
-		}
-		// TODO t.Fatal("failed volumeByName")?
+	log.WithField("volumeName", volumeName).Info("get volume by ec2.Name")
+	vols, err := client.API().Volumes(nil, false)
+	assert.NoError(t, err)
+	if err != nil {
 		t.FailNow()
-		t.Error("failed volumeByName")
-		return nil
-	*/
+	}
+	assert.Contains(t, vols, ec2.Name)
+	for _, vol := range vols[ec2.Name] {
+		if vol.Name == volumeName {
+			return vol
+		}
+	}
+	t.FailNow()
+	t.Error("failed volumeByName")
+	return nil
 }
 
 // same everywhere
@@ -248,19 +244,16 @@ func volumeAttach(
 // same everywhere - omitted in EFS
 func volumeInspect(
 	t *testing.T, client types.Client, volumeID string) *types.Volume {
-	return nil
-	/*
-		log.WithField("volumeID", volumeID).Info("inspecting volume")
-		reply, err := client.API().VolumeInspect(nil, ec2.Name, volumeID, false)
-		assert.NoError(t, err)
+	log.WithField("volumeID", volumeID).Info("inspecting volume")
+	reply, err := client.API().VolumeInspect(nil, ec2.Name, volumeID, false)
+	assert.NoError(t, err)
 
-		if err != nil {
-			t.Error("failed volumeInspect")
-			t.FailNow()
-		}
-		apitests.LogAsJSON(reply, t)
-		return reply
-	*/
+	if err != nil {
+		t.Error("failed volumeInspect")
+		t.FailNow()
+	}
+	apitests.LogAsJSON(reply, t)
+	return reply
 }
 
 // same everywhere
@@ -376,4 +369,16 @@ func TestVolumeAttach(t *testing.T) {
 		}
 		apitests.Run(t, ec2.Name, configYAML, tf)
 	*/
+}
+
+// mini tests
+func TestVolumeInspect(t *testing.T) {
+	if skipTests() {
+		t.SkipNow()
+	}
+	tf := func(config gofig.Config, client types.Client, t *testing.T) {
+		_ = volumeByName(t, client, "mc-server-volume")
+		_ = volumeInspect(t, client, "vol-992ca510")
+	}
+	apitests.Run(t, ec2.Name, configYAML, tf)
 }
