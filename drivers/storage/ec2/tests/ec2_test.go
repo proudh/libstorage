@@ -219,23 +219,19 @@ func TestVolumes(t *testing.T) {
 // same everywhere
 func volumeAttach(
 	t *testing.T, client types.Client, volumeID string) *types.Volume {
-	return nil
-	/*
-		log.WithField("volumeID", volumeID).Info("attaching volume")
-		reply, token, err := client.API().VolumeAttach(
-			nil, ec2.Name, volumeID, &types.VolumeAttachRequest{})
+	log.WithField("volumeID", volumeID).Info("attaching volume")
+	reply, token, err := client.API().VolumeAttach(
+		nil, ec2.Name, volumeID, &types.VolumeAttachRequest{})
 
-		assert.NoError(t, err)
-		if err != nil {
-			// TODO t.Fatal("failed volumeAttach")
-			t.Error("failed volumeAttach")
-			t.FailNow()
-		}
-		apitests.LogAsJSON(reply, t)
-		assert.NotEqual(t, token, "")
+	assert.NoError(t, err)
+	if err != nil {
+		t.Error("failed volumeAttach")
+		t.FailNow()
+	}
+	apitests.LogAsJSON(reply, t)
+	assert.NotEqual(t, token, "")
 
-		return reply
-	*/
+	return reply
 }
 
 // same everywhere - omitted in EFS
@@ -374,7 +370,8 @@ func TestVolumeInspect(t *testing.T) {
 		t.SkipNow()
 	}
 	tf := func(config gofig.Config, client types.Client, t *testing.T) {
-		_ = volumeCreate(t, client, "ls-test-vol-ph")
+		_ = volumeAttach(t, client, "vol-db643052")
+		//	_ = volumeCreate(t, client, "ls-test-vol-ph")
 		//	_ = volumeByName(t, client, "mc-server-volume")
 		//	_ = volumeInspect(t, client, "vol-992ca510")
 	}
