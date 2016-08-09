@@ -27,6 +27,15 @@ import (
 	"github.com/emccode/libstorage/drivers/storage/ec2"
 )
 
+const (
+	//@enum WaitAction
+	WaitVolumeCreate = "create"
+	//@enum WaitAction
+	WaitVolumeAttach = "attach"
+	//@enum WaitAction
+	WaitVolumeDetach = "detach"
+)
+
 // Config, client, and whatever else you need to connect to the provider
 // Client varies with provider SDK
 type driver struct {
@@ -170,7 +179,7 @@ func (d *driver) Volumes(
 	ctx types.Context,
 	opts *types.VolumesOpts) ([]*types.Volume, error) {
 	// Get all volumes (and their attachments if specified)
-	ec2vols, err := d.getVolume(ctx, "", "", opts.Attachments)
+	ec2vols, err := d.getVolume(ctx, "", "")
 	//TODO convert to types.Volume
 	vols := d.convertToTypesVolume(ec2vols, opts.Attachments)
 	if err != nil {
@@ -185,7 +194,7 @@ func (d *driver) VolumeInspect(
 	volumeID string,
 	opts *types.VolumeInspectOpts) (*types.Volume, error) {
 	// Get volume corresponding to volume ID
-	ec2vols, err := d.getVolume(ctx, volumeID, "", opts.Attachments)
+	ec2vols, err := d.getVolume(ctx, volumeID, "")
 	//TODO convert to types.Volume
 	vols := d.convertToTypesVolume(ec2vols, opts.Attachments)
 
@@ -212,7 +221,7 @@ func (d *driver) VolumeCreate(ctx types.Context, volumeName string,
 	log.WithFields(fields).Debug("creating volume")
 
 	// check if volume with same name exists
-	ec2vols, err := d.getVolume(ctx, "", volumeName, false)
+	ec2vols, err := d.getVolume(ctx, "", volumeName)
 	//TODO convert to types.Volume
 	volumes := d.convertToTypesVolume(ec2vols, false)
 	if err != nil {
@@ -324,7 +333,7 @@ func (d *driver) VolumeAttach(
 	}
 
 	// review volume with attachments to any host
-	ec2vols, err := d.getVolume(ctx, volumeID, "", false)
+	ec2vols, err := d.getVolume(ctx, volumeID, "")
 	//TODO convert to types.Volume
 	volumes := d.convertToTypesVolume(ec2vols, true)
 	if err != nil {
@@ -357,6 +366,10 @@ func (d *driver) VolumeAttach(
 		)
 	}
 
+	if err = d.waitVolumeComplete(ctx, volumeID, WaitVolumeAttach); err != nil {
+		return nil, "", goof.WithError("error waiting for volume attach", err)
+	}
+
 	// check if successful attach
 	attachedVol, err := d.VolumeInspect(
 		ctx, volumeID, &types.VolumeInspectOpts{
@@ -375,46 +388,60 @@ func (d *driver) VolumeDetach(
 	ctx types.Context,
 	volumeID string,
 	opts *types.VolumeDetachOpts) (*types.Volume, error) {
-	return nil, types.ErrNotImplemented
-	// 	// check for errors:
-	// 	// no volume ID inputted
-	// 	if volumeID == "" {
-	// 		return nil, goof.New("missing volume id")
-	// 	}
+	// check for errors:
+	// no volume ID inputted
+	if volumeID == "" {
+		return nil, goof.New("missing volume id")
+	}
 
-	// 	volumes, err := d.getVolume(ctx, volumeID, "", false)
+	ec2vols, err := d.getVolume(ctx, volumeID, "")
 	//TODO convert to types.Volume
-	// 	if err != nil {
-	// 		return nil, err
-	// 	}
+	volumes := d.convertToTypesVolume(ec2vols, true)
 
-	// 	// no volumes to detach
-	// 	if len(volumes) == 0 {
-	// 		return nil, goof.New("no volume returned")
-	// 	}
+	if err != nil {
+		return nil, err
+	}
 
-	// 	// volume has no attachments
-	// 	if len(volumes[0].Attachments) == 0 {
-	// 		return nil, goof.New("volume already detached")
-	// 	}
+	// no volumes to detach
+	if len(volumes) == 0 {
+		return nil, goof.New("no volume returned")
+	}
 
-	// 	// TODO put into helper function i.e. detachVolume?
-	// 	dvInput := &awsec2.DetachVolumeInput{
-	// 		VolumeId: &volumeID,
-	// 		Force:    &opts.Force,
-	// 	}
+	// volume has no attachments
+	if len(volumes[0].Attachments) == 0 {
+		return nil, goof.New("volume already detached")
+	}
 
-	// 	if _, err = d.ec2Instance.DetachVolume(dvInput); err != nil {
-	// 		return nil, goof.WithFieldsE(
-	// 			log.Fields{
-	// 				"provider": ec2.Name,
-	// 				"volumeID": volumeID}, "error detaching volume", err)
-	// 	}
+	// TODO put into helper function i.e. detachVolume?
+	dvInput := &awsec2.DetachVolumeInput{
+		VolumeId: &volumeID,
+		Force:    &opts.Force,
+	}
 
-	// 	ctx.Info("detached volume", volumeID)
+	if _, err = d.ec2Instance.DetachVolume(dvInput); err != nil {
+		return nil, goof.WithFieldsE(
+			log.Fields{
+				"provider": ec2.Name,
+				"volumeID": volumeID}, "error detaching volume", err)
+	}
 
-	// 	return d.VolumeInspect(
-	// 		ctx, volumeID, &types.VolumeInspectOpts{Attachments: true})
+	if err = d.waitVolumeComplete(ctx, volumeID, WaitVolumeDetach); err != nil {
+		return nil, goof.WithError("error waiting for volume detach", err)
+	}
+
+	ctx.Info("detached volume", volumeID)
+
+	// check if successful detach
+	detachedVol, err := d.VolumeInspect(
+		ctx, volumeID, &types.VolumeInspectOpts{
+			Attachments: true,
+			Opts:        opts.Opts,
+		})
+	if err != nil {
+		return nil, goof.WithError("error getting volume", err)
+	}
+
+	return detachedVol, nil
 }
 
 // Snapshots returns all volumes or a filtered list of snapshots.
@@ -458,8 +485,7 @@ func (d *driver) SnapshotRemove(
 // getVolume searches and returns a volume matching criteria
 func (d *driver) getVolume(
 	ctx types.Context,
-	volumeID string, volumeName string,
-	attachments bool) ([]*awsec2.Volume, error) {
+	volumeID string, volumeName string) ([]*awsec2.Volume, error) {
 	filters := []*awsec2.Filter{}
 	if volumeName != "" {
 		filters = append(filters, &awsec2.Filter{
@@ -494,8 +520,7 @@ func (d *driver) getVolume(
 		return []*awsec2.Volume{}, err
 	}
 
-	volumes := resp.Volumes
-	return volumes, nil
+	return resp.Volumes, nil
 }
 
 func (d *driver) convertToTypesVolume(
@@ -541,7 +566,7 @@ func (d *driver) convertToTypesVolume(
 func (d *driver) attachVolume(
 	ctx types.Context, volumeID, volumeName, deviceName string) error {
 	// sanity check # of volumes to attach
-	vol, err := d.getVolume(ctx, volumeID, volumeName, false)
+	vol, err := d.getVolume(ctx, volumeID, volumeName)
 	if err != nil {
 		return goof.WithError("Error getting volume", err)
 	}
@@ -723,7 +748,7 @@ func (d *driver) createVolume(ctx types.Context, volumeName string,
 		return &awsec2.Volume{}, goof.WithError("Error creating tags", err)
 	}
 
-	if err = d.waitVolumeComplete(ctx, *resp.VolumeId); err != nil {
+	if err = d.waitVolumeComplete(ctx, *resp.VolumeId, WaitVolumeCreate); err != nil {
 		return &awsec2.Volume{}, goof.WithError("Error waiting for volume creation", err)
 	}
 	return resp, nil
@@ -780,19 +805,31 @@ func (d *driver) createVolumeCreateTags(
 	return nil
 }
 
-func (d *driver) waitVolumeComplete(ctx types.Context, volumeID string) error {
+func (d *driver) waitVolumeComplete(ctx types.Context, volumeID string, action string) error {
 	if volumeID == "" {
 		return goof.New("Missing volume ID")
 	}
 
+UpdateLoop:
 	for {
-		volumes, err := d.getVolume(ctx, volumeID, "", false)
+		volumes, err := d.getVolume(ctx, volumeID, "")
 		if err != nil {
 			return goof.WithError("Error getting volume", err)
 		}
 
-		if *volumes[0].State == awsec2.VolumeStateAvailable {
-			break
+		switch action {
+		case WaitVolumeCreate:
+			if *volumes[0].State == awsec2.VolumeStateAvailable {
+				break UpdateLoop
+			}
+		case WaitVolumeDetach:
+			if len(volumes[0].Attachments) == 0 {
+				break UpdateLoop
+			}
+		case WaitVolumeAttach:
+			if len(volumes[0].Attachments) == 1 && *volumes[0].Attachments[0].State == awsec2.VolumeAttachmentStateAttached {
+				break UpdateLoop
+			}
 		}
 		time.Sleep(1 * time.Second)
 	}
