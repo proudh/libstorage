@@ -331,18 +331,16 @@ func volumeInspectDetachedFail(
 func volumeDetach(
 	t *testing.T, client types.Client, volumeID string) *types.Volume {
 	log.WithField("volumeID", volumeID).Info("detaching volume")
-	return nil
-	/*		reply, err := client.API().VolumeDetach(
-				nil, ec2.Name, volumeID, &types.VolumeDetachRequest{})
-			assert.NoError(t, err)
-			if err != nil {
-				t.Error("failed volumeDetach")
-				t.FailNow()
-			}
-			apitests.LogAsJSON(reply, t)
-			assert.Len(t, reply.Attachments, 0)
-			return reply
-	*/
+	reply, err := client.API().VolumeDetach(
+		nil, ec2.Name, volumeID, &types.VolumeDetachRequest{})
+	assert.NoError(t, err)
+	if err != nil {
+		t.Error("failed volumeDetach")
+		t.FailNow()
+	}
+	apitests.LogAsJSON(reply, t)
+	assert.Len(t, reply.Attachments, 0)
+	return reply
 }
 
 // same everywhere but use apitests.RunGroup
@@ -371,6 +369,7 @@ func TestVolumeInspect(t *testing.T) {
 	}
 	tf := func(config gofig.Config, client types.Client, t *testing.T) {
 		_ = volumeAttach(t, client, "vol-db643052")
+		_ = volumeDetach(t, client, "vol-db643052")
 		//	_ = volumeCreate(t, client, "ls-test-vol-ph")
 		//	_ = volumeByName(t, client, "mc-server-volume")
 		//	_ = volumeInspect(t, client, "vol-992ca510")
