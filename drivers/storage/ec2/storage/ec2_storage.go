@@ -294,9 +294,7 @@ func (d *driver) VolumeRemove(
 	ctx types.Context,
 	volumeID string,
 	opts types.Store) error {
-	return types.ErrNotImplemented
-
-	/*fields := map[string]interface{}{
+	fields := map[string]interface{}{
 		"provider": ec2.Name,
 		"volumeID": volumeID,
 	}
@@ -314,7 +312,7 @@ func (d *driver) VolumeRemove(
 		return goof.WithFieldsE(fields, "error deleting volume", err)
 	}
 
-	return nil*/
+	return nil
 }
 
 // VolumeAttach attaches a volume and provides a token clients can use
