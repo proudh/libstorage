@@ -515,7 +515,6 @@ func (d *driver) SnapshotInspect(
 }
 
 // SnapshotCopy copies an existing snapshot.
-// TODO WiP
 func (d *driver) SnapshotCopy(
 	ctx types.Context,
 	snapshotID, snapshotName, destinationID string,
@@ -583,11 +582,29 @@ func (d *driver) SnapshotCopy(
 }
 
 // SnapshotRemove removes a snapshot.
-// TODO Not implemented
+// TODO WiP
 func (d *driver) SnapshotRemove(
 	ctx types.Context,
 	snapshotID string,
 	opts types.Store) error {
+	fields := map[string]interface{}{
+		"provider":   ec2.Name,
+		"snapshotID": snapshotID,
+	}
+
+	// no snapshot ID inputted
+	if snapshotID == "" {
+		return goof.New("missing snapshot id")
+	}
+
+	dsInput := &awsec2.DeleteSnapshotInput{
+		SnapshotId: &snapshotID,
+	}
+	_, err := d.ec2Instance.DeleteSnapshot(dsInput)
+	if err != nil {
+		return goof.WithFieldsE(fields, "error deleting snapshot", err)
+	}
+
 	return nil
 }
 
