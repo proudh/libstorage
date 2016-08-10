@@ -40,6 +40,7 @@ const (
 // Client varies with provider SDK
 type driver struct {
 	config           gofig.Config
+	nextDeviceInfo   *types.NextDeviceInfo
 	instanceDocument *instanceIdentityDocument
 	ec2Instance      *awsec2.EC2
 	//	ec2Tag           string
@@ -95,6 +96,12 @@ func (d *driver) Init(context types.Context, config gofig.Config) error {
 		fields["secretKey"] = "******"
 	}
 
+	d.nextDeviceInfo = &types.NextDeviceInfo{
+		Prefix:  "xvd",
+		Pattern: "[a-z]",
+		Ignore:  false,
+	}
+
 	var err error
 	d.instanceDocument, err = getInstanceIdentityDocument()
 	if err != nil {
@@ -138,10 +145,9 @@ func (d *driver) Init(context types.Context, config gofig.Config) error {
 
 // NextDeviceInfo returns the information about the driver's next available
 // device workflow.
-// Not implemented yet
 func (d *driver) NextDeviceInfo(
 	ctx types.Context) (*types.NextDeviceInfo, error) {
-	return nil, nil
+	return d.nextDeviceInfo, nil
 }
 
 // Type returns the type of storage the driver provides.
@@ -180,7 +186,6 @@ func (d *driver) Volumes(
 	opts *types.VolumesOpts) ([]*types.Volume, error) {
 	// Get all volumes (and their attachments if specified)
 	ec2vols, err := d.getVolume(ctx, "", "")
-	//TODO convert to types.Volume
 	vols := d.convertToTypesVolume(ec2vols, opts.Attachments)
 	if err != nil {
 		return nil, err
@@ -195,7 +200,6 @@ func (d *driver) VolumeInspect(
 	opts *types.VolumeInspectOpts) (*types.Volume, error) {
 	// Get volume corresponding to volume ID
 	ec2vols, err := d.getVolume(ctx, volumeID, "")
-	//TODO convert to types.Volume
 	vols := d.convertToTypesVolume(ec2vols, opts.Attachments)
 
 	if err != nil {
@@ -222,7 +226,6 @@ func (d *driver) VolumeCreate(ctx types.Context, volumeName string,
 
 	// check if volume with same name exists
 	ec2vols, err := d.getVolume(ctx, "", volumeName)
-	//TODO convert to types.Volume
 	volumes := d.convertToTypesVolume(ec2vols, false)
 	if err != nil {
 		return nil, err
@@ -263,7 +266,7 @@ func (d *driver) VolumeCreate(ctx types.Context, volumeName string,
 }
 
 // VolumeCreateFromSnapshot creates a new volume from an existing snapshot.
-// Not implemented yet
+// TODO Not implemented yet
 func (d *driver) VolumeCreateFromSnapshot(
 	ctx types.Context,
 	snapshotID, volumeName string,
@@ -272,7 +275,7 @@ func (d *driver) VolumeCreateFromSnapshot(
 }
 
 // VolumeCopy copies an existing volume.
-// Not implemented yet
+// TODO Not implemented yet
 func (d *driver) VolumeCopy(
 	ctx types.Context,
 	volumeID, volumeName string,
@@ -281,7 +284,7 @@ func (d *driver) VolumeCopy(
 }
 
 // VolumeSnapshot snapshots a volume.
-// Not implemented yet
+// TODO Not implemented yet
 func (d *driver) VolumeSnapshot(
 	ctx types.Context,
 	volumeID, snapshotName string,
@@ -304,6 +307,8 @@ func (d *driver) VolumeRemove(
 		return goof.New("missing volume id")
 	}
 
+	//TODO check if volume is attached? if so fail
+
 	dvInput := &awsec2.DeleteVolumeInput{
 		VolumeId: &volumeID,
 	}
@@ -325,14 +330,13 @@ func (d *driver) VolumeAttach(
 	if volumeID == "" {
 		return nil, "", goof.New("missing volume id")
 	}
-	nextDeviceName, err := d.GetDeviceNextAvailable()
+	nextDeviceName, err := d.GetNextAvailableDeviceName()
 	if err != nil {
 		return nil, "", err
 	}
 
 	// review volume with attachments to any host
 	ec2vols, err := d.getVolume(ctx, volumeID, "")
-	//TODO convert to types.Volume
 	volumes := d.convertToTypesVolume(ec2vols, true)
 	if err != nil {
 		return nil, "", goof.WithError("Error getting volume", err)
@@ -345,12 +349,11 @@ func (d *driver) VolumeAttach(
 	if len(volumes[0].Attachments) > 0 && !opts.Force {
 		return nil, "", goof.New("volume already attached to a host")
 	}
-	// TODO option to force attachment - detach other volume first
-	/*if opts.Force {
+	if opts.Force {
 		if _, err := d.VolumeDetach(ctx, volumeID, nil); err != nil {
 			return nil, "", err
 		}
-	}*/
+	}
 
 	// call helper function
 	err = d.attachVolume(ctx, volumeID, volumes[0].Name, nextDeviceName)
@@ -393,7 +396,6 @@ func (d *driver) VolumeDetach(
 	}
 
 	ec2vols, err := d.getVolume(ctx, volumeID, "")
-	//TODO convert to types.Volume
 	volumes := d.convertToTypesVolume(ec2vols, true)
 
 	if err != nil {
@@ -410,7 +412,6 @@ func (d *driver) VolumeDetach(
 		return nil, goof.New("volume already detached")
 	}
 
-	// TODO put into helper function i.e. detachVolume?
 	dvInput := &awsec2.DetachVolumeInput{
 		VolumeId: &volumeID,
 		Force:    &opts.Force,
@@ -443,7 +444,7 @@ func (d *driver) VolumeDetach(
 }
 
 // Snapshots returns all volumes or a filtered list of snapshots.
-// Not implemented
+// TODO Not implemented
 func (d *driver) Snapshots(
 	ctx types.Context,
 	opts types.Store) ([]*types.Snapshot, error) {
@@ -451,7 +452,7 @@ func (d *driver) Snapshots(
 }
 
 // SnapshotInspect inspects a single snapshot.
-// Not implemented
+// TODO Not implemented
 func (d *driver) SnapshotInspect(
 	ctx types.Context,
 	snapshotID string,
@@ -460,7 +461,7 @@ func (d *driver) SnapshotInspect(
 }
 
 // SnapshotCopy copies an existing snapshot.
-// Not implemented
+// TODO Not implemented
 func (d *driver) SnapshotCopy(
 	ctx types.Context,
 	snapshotID, snapshotName, destinationID string,
@@ -469,7 +470,7 @@ func (d *driver) SnapshotCopy(
 }
 
 // SnapshotRemove removes a snapshot.
-// Not implemented
+// TODO Not implemented
 func (d *driver) SnapshotRemove(
 	ctx types.Context,
 	snapshotID string,
@@ -617,7 +618,7 @@ func getInstanceIdentityDocument() (*instanceIdentityDocument, error) {
 	return &document, nil
 }
 
-func (d *driver) GetDeviceNextAvailable() (string, error) {
+func (d *driver) GetNextAvailableDeviceName() (string, error) {
 	letters := []string{
 		"a", "b", "c", "d", "e", "f", "g", "h",
 		"i", "j", "k", "l", "m", "n", "o", "p"}
@@ -630,7 +631,9 @@ func (d *driver) GetDeviceNextAvailable() (string, error) {
 	}
 
 	for _, blockDevice := range blockDeviceMapping {
-		re, _ := regexp.Compile(`^/dev/xvd([a-z])`)
+		re, _ := regexp.Compile(`^/dev/` +
+			d.nextDeviceInfo.Prefix +
+			`(` + d.nextDeviceInfo.Pattern + `)`)
 		res := re.FindStringSubmatch(blockDevice.Name)
 		if len(res) > 0 {
 			blockDeviceNames[res[1]] = true
@@ -643,7 +646,9 @@ func (d *driver) GetDeviceNextAvailable() (string, error) {
 	}
 
 	for _, localDevice := range localDevices {
-		re, _ := regexp.Compile(`^xvd([a-z])`)
+		re, _ := regexp.Compile(`^` +
+			d.nextDeviceInfo.Prefix +
+			`(` + d.nextDeviceInfo.Pattern + `)`)
 		res := re.FindStringSubmatch(localDevice)
 		if len(res) > 0 {
 			blockDeviceNames[res[1]] = true
@@ -652,7 +657,8 @@ func (d *driver) GetDeviceNextAvailable() (string, error) {
 
 	for _, letter := range letters {
 		if !blockDeviceNames[letter] {
-			nextDeviceName := "/dev/xvd" + letter
+			nextDeviceName := "/dev/" +
+				d.nextDeviceInfo.Prefix + letter
 			log.WithFields(log.Fields{
 				"driverName":     d.Name(),
 				"nextDeviceName": nextDeviceName}).Info("got next device name")

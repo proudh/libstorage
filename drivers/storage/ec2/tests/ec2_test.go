@@ -10,14 +10,14 @@ import (
 	"github.com/akutz/gofig"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/emccode/libstorage/api/context"
-	"github.com/emccode/libstorage/api/registry"
+	//"github.com/emccode/libstorage/api/context"
+	//"github.com/emccode/libstorage/api/registry"
 	"github.com/emccode/libstorage/api/server"
 	apitests "github.com/emccode/libstorage/api/tests"
 	"github.com/emccode/libstorage/api/types"
-	"github.com/emccode/libstorage/api/utils"
+	//"github.com/emccode/libstorage/api/utils"
 	"github.com/emccode/libstorage/drivers/storage/ec2"
-	ec2x "github.com/emccode/libstorage/drivers/storage/ec2/executor"
+	//ec2x "github.com/emccode/libstorage/drivers/storage/ec2/executor"
 )
 
 // Put contents of sample config.yml here
@@ -55,9 +55,27 @@ func TestMain(m *testing.M) {
 	os.Exit(ec)
 }
 
+func TestVolumes(t *testing.T) {
+	if skipTests() {
+		t.SkipNow()
+	}
+
+	tf := func(config gofig.Config, client types.Client, t *testing.T) {
+		_ = volumeCreate(t, client, volumeName)
+		_ = volumeCreate(t, client, volumeName2)
+
+		vol1 := volumeByName(t, client, volumeName)
+		vol2 := volumeByName(t, client, volumeName2)
+
+		volumeRemove(t, client, vol1.ID)
+		volumeRemove(t, client, vol2.ID)
+	}
+	apitests.Run(t, ec2.Name, configYAML, tf)
+}
+
 // Isilon and ScaleIO just check result of InstanceID();
 // VBox and EFS fill in InstanceID completely then check it
-func TestInstanceID(t *testing.T) {
+/*func TestInstanceID(t *testing.T) {
 	// create storage driver
 	sd, err := registry.NewStorageDriver(ec2.Name)
 	if err != nil {
@@ -113,6 +131,55 @@ func TestServices(t *testing.T) {
 	apitests.Run(t, ec2.Name, configYAML, tf)
 }
 
+// same everywhere but use apitests.RunGroup
+func TestVolumeAttach(t *testing.T) {
+	if skipTests() {
+		t.SkipNow()
+	}
+	var vol *types.Volume
+	tf := func(config gofig.Config, client types.Client, t *testing.T) {
+		vol = volumeCreate(t, client, volumeName)
+		_ = volumeAttach(t, client, vol.ID)
+		_ = volumeInspectAttached(t, client, vol.ID)
+		_ = volumeDetach(t, client, vol.ID)
+		_ = volumeInspectDetached(t, client, vol.ID)
+		volumeRemove(t, client, vol.ID)
+	}
+	apitests.Run(t, ec2.Name, configYAML, tf)
+}
+
+// same everywhere
+func TestVolumeCreateRemove(t *testing.T) {
+	if skipTests() {
+		t.SkipNow()
+	}
+
+	tf := func(config gofig.Config, client types.Client, t *testing.T) {
+		vol := volumeCreate(t, client, volumeName)
+		volumeRemove(t, client, vol.ID)
+	}
+	apitests.Run(t, ec2.Name, configYAML, tf)
+}
+
+// same everywhere
+func TestVolumes(t *testing.T) {
+	if skipTests() {
+		t.SkipNow()
+	}
+
+	tf := func(config gofig.Config, client types.Client, t *testing.T) {
+		_ = volumeCreate(t, client, volumeName)
+		_ = volumeCreate(t, client, volumeName2)
+
+		vol1 := volumeByName(t, client, volumeName)
+		vol2 := volumeByName(t, client, volumeName2)
+
+		volumeRemove(t, client, vol1.ID)
+		volumeRemove(t, client, vol2.ID)
+	}
+	apitests.Run(t, ec2.Name, configYAML, tf)
+}*/
+
 //same everywhere
 func volumeCreate(
 	t *testing.T, client types.Client, volumeName string) *types.Volume {
@@ -163,19 +230,6 @@ func volumeByName(
 	return nil
 }
 
-// same everywhere
-func TestVolumeCreateRemove(t *testing.T) {
-	if skipTests() {
-		t.SkipNow()
-	}
-
-	tf := func(config gofig.Config, client types.Client, t *testing.T) {
-		vol := volumeCreate(t, client, volumeName)
-		volumeRemove(t, client, vol.ID)
-	}
-	apitests.Run(t, ec2.Name, configYAML, tf)
-}
-
 func volumeRemove(t *testing.T, client types.Client, volumeID string) {
 	log.WithField("volumeID", volumeID).Info("removing volume")
 	err := client.API().VolumeRemove(
@@ -186,25 +240,6 @@ func volumeRemove(t *testing.T, client types.Client, volumeID string) {
 		t.Error("failed volumeRemove")
 		t.FailNow()
 	}
-}
-
-// same everywhere
-func TestVolumes(t *testing.T) {
-	if skipTests() {
-		t.SkipNow()
-	}
-
-	tf := func(config gofig.Config, client types.Client, t *testing.T) {
-		_ = volumeCreate(t, client, volumeName)
-		_ = volumeCreate(t, client, volumeName2)
-
-		vol1 := volumeByName(t, client, volumeName)
-		vol2 := volumeByName(t, client, volumeName2)
-
-		volumeRemove(t, client, vol1.ID)
-		volumeRemove(t, client, vol2.ID)
-	}
-	apitests.Run(t, ec2.Name, configYAML, tf)
 }
 
 // same everywhere
@@ -287,21 +322,4 @@ func volumeDetach(
 	apitests.LogAsJSON(reply, t)
 	assert.Len(t, reply.Attachments, 0)
 	return reply
-}
-
-// same everywhere but use apitests.RunGroup
-func TestVolumeAttach(t *testing.T) {
-	if skipTests() {
-		t.SkipNow()
-	}
-	var vol *types.Volume
-	tf := func(config gofig.Config, client types.Client, t *testing.T) {
-		vol = volumeCreate(t, client, volumeName)
-		_ = volumeAttach(t, client, vol.ID)
-		_ = volumeInspectAttached(t, client, vol.ID)
-		_ = volumeDetach(t, client, vol.ID)
-		_ = volumeInspectDetached(t, client, vol.ID)
-		volumeRemove(t, client, vol.ID)
-	}
-	apitests.Run(t, ec2.Name, configYAML, tf)
 }
