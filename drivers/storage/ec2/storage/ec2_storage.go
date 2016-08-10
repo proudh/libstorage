@@ -286,7 +286,6 @@ func (d *driver) VolumeCopy(
 }
 
 // VolumeSnapshot snapshots a volume.
-// TODO WiP
 func (d *driver) VolumeSnapshot(
 	ctx types.Context,
 	volumeID, snapshotName string,
@@ -515,123 +514,72 @@ func (d *driver) SnapshotInspect(
 	return snapshots[0], nil
 }
 
-// TODO WiP
-/*
-func (d *driver) CopySnapshot(runAsync bool,
-	volumeID, snapshotID, snapshotName, destinationSnapshotName,
-	destinationRegion string) (*core.Snapshot, error) {
-		if volumeID == "" && snapshotID == "" && snapshotName == "" {
-			return nil, goof.New("Missing volumeID, snapshotID, or snapshotName")
-		}
-
-		if destinationRegion == "" {
-			destinationRegion = d.instanceDocument.Region
-		}
-
-		snapshots, err := d.getSnapshot(volumeID, snapshotID, snapshotName)
-		if err != nil {
-			return nil, err
-		}
-
-		if len(snapshots) > 1 {
-			return nil, errors.ErrMultipleVolumesReturned
-		} else if len(snapshots) == 0 {
-			return nil, errors.ErrNoVolumesReturned
-		}
-
-		snapshotID = *(snapshots[0]).SnapshotId
-
-		options := &ec2.CopySnapshotInput{
-			SourceRegion:      &d.instanceDocument.Region,
-			DestinationRegion: &destinationRegion,
-			SourceSnapshotId:  &snapshotID,
-			Description: aws.String(fmt.Sprintf("[Copied %s from %s]",
-				snapshotID, d.instanceDocument.Region)),
-		}
-		resp := &ec2.CopySnapshotOutput{}
-
-		destec2Instance := ec2.New(
-			session.New(),
-			aws.NewConfig().WithCredentials(d.ec2creds).WithRegion(destinationRegion),
-		)
-
-		origec2Instance := d.ec2Instance
-		d.ec2Instance = destec2Instance
-		defer func() { d.ec2Instance = origec2Instance }()
-
-		resp, err = d.ec2Instance.CopySnapshot(options)
-		if err != nil {
-			return nil, err
-		}
-
-		if destinationSnapshotName != "" || d.ec2Tag != "" {
-
-			var ctInput *ec2.CreateTagsInput
-			initCTInput := func() {
-				if ctInput != nil {
-					return
-				}
-				ctInput = &ec2.CreateTagsInput{
-					Resources: []*string{resp.SnapshotId},
-					Tags:      []*ec2.Tag{},
-				}
-			}
-
-			if destinationSnapshotName != "" {
-				initCTInput()
-				ctInput.Tags = append(
-					ctInput.Tags,
-					&ec2.Tag{
-						Key:   aws.String("Name"),
-						Value: &destinationSnapshotName,
-					})
-			}
-
-			if d.ec2Tag != "" {
-				initCTInput()
-				ctInput.Tags = append(
-					ctInput.Tags,
-					&ec2.Tag{
-						Key:   aws.String(rexrayTag),
-						Value: &d.ec2Tag,
-					})
-			}
-
-			_, err = d.ec2Instance.CreateTags(ctInput)
-
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		if !runAsync {
-			log.WithFields(log.Fields{
-				"moduleName":      d.r.Context,
-				"driverName":      d.Name(),
-				"runAsync":        runAsync,
-				"resp.SnapshotId": resp.SnapshotId}).Info("waiting for snapshot to complete")
-
-			err = d.waitSnapshotComplete(*resp.SnapshotId)
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		snapshot, err := d.GetSnapshot("", *resp.SnapshotId, "")
-		if err != nil {
-			return nil, err
-		}
-
-		return snapshot[0], nil
-}*/
-
 // SnapshotCopy copies an existing snapshot.
 // TODO WiP
 func (d *driver) SnapshotCopy(
 	ctx types.Context,
 	snapshotID, snapshotName, destinationID string,
 	opts types.Store) (*types.Snapshot, error) {
-	return nil, nil
+	if snapshotID == "" && snapshotName == "" {
+		return &types.Snapshot{},
+			goof.New("Missing snapshotID or snapshotName")
+	}
+
+	origSnapshots, err := d.getSnapshot(ctx, "", snapshotID, snapshotName)
+	if err != nil {
+		return &types.Snapshot{},
+			goof.WithError("Error getting snapshot", err)
+	}
+
+	if len(origSnapshots) > 1 {
+		return &types.Snapshot{},
+			goof.New("multiple snapshots returned")
+	} else if len(origSnapshots) == 0 {
+		return &types.Snapshot{}, goof.New("no snapshots returned")
+	}
+
+	snapshotID = *(origSnapshots[0]).SnapshotId
+	snapshotName = d.getName(origSnapshots[0].Tags)
+
+	options := &awsec2.CopySnapshotInput{
+		SourceSnapshotId: &snapshotID,
+		SourceRegion:     &d.instanceDocument.Region,
+		Description: aws.String(fmt.Sprintf(
+			"Copy of %s (%s)", snapshotName, snapshotID)),
+	}
+	resp := &awsec2.CopySnapshotOutput{}
+
+	resp, err = d.ec2Instance.CopySnapshot(options)
+	if err != nil {
+		return nil, err
+	}
+
+	destSnapshotName := fmt.Sprintf("Copy of %s", snapshotName)
+	if err = d.createTags(*resp.SnapshotId, destSnapshotName); err != nil {
+		return &types.Snapshot{}, goof.WithError(
+			"Error creating tags", err)
+	}
+
+	log.WithFields(log.Fields{
+		"moduleName":      d.Name(),
+		"driverName":      d.Name(),
+		"resp.SnapshotId": *resp.SnapshotId}).Info("waiting for snapshot to complete")
+
+	err = d.waitSnapshotComplete(ctx, *resp.SnapshotId)
+	if err != nil {
+		return &types.Snapshot{}, goof.WithError(
+			"Error waiting for snapshot creation", err)
+	}
+
+	snapshotCopy, err := d.SnapshotInspect(ctx, *resp.SnapshotId, nil)
+	if err != nil {
+		return &types.Snapshot{}, goof.WithError(
+			"Error getting snapshot copy", err)
+	}
+	destinationID = snapshotCopy.ID
+
+	log.Println("Copied Snapshot: " + destinationID)
+	return snapshotCopy, nil
 }
 
 // SnapshotRemove removes a snapshot.
@@ -692,7 +640,7 @@ func (d *driver) toTypesVolume(
 	var volumesSD []*types.Volume
 	for _, volume := range ec2vols {
 		var attachmentsSD []*types.VolumeAttachment
-		name := getName(volume.Tags)
+		name := d.getName(volume.Tags)
 
 		volumeSD := &types.Volume{
 			Name:             name,
@@ -770,7 +718,7 @@ func (d *driver) toTypesSnapshot(
 	ec2snapshots []*awsec2.Snapshot) []*types.Snapshot {
 	var snapshotsInt []*types.Snapshot
 	for _, snapshot := range ec2snapshots {
-		name := getName(snapshot.Tags)
+		name := d.getName(snapshot.Tags)
 		snapshotSD := &types.Snapshot{
 			Name:        name,
 			VolumeID:    *snapshot.VolumeId,
@@ -1092,7 +1040,7 @@ func (d *driver) waitSnapshotComplete(
 	return nil
 }
 
-func getName(tags []*awsec2.Tag) string {
+func (d *driver) getName(tags []*awsec2.Tag) string {
 	for _, tag := range tags {
 		if *tag.Key == "Name" {
 			return *tag.Value
