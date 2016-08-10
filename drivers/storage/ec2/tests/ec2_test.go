@@ -61,9 +61,12 @@ func TestVolumes(t *testing.T) {
 	}
 
 	tf := func(config gofig.Config, client types.Client, t *testing.T) {
+		_ = volumeSnapshot(t, client, "vol-992ca510", "ls-test-snap-ph")
+		snap1 := snapshotByName(t, client, "ls-test-snap-ph")
+		_ = snapshotInspect(t, client, snap1.ID)
 		//		_ = snapshotInspect(t, client, "snap-ef672315")
-		_ = snapshotByName(t, client, "mc-server-snapshot-ph")
-		_ = snapshotByName(t, client, "")
+		//	_ = snapshotByName(t, client, "mc-server-snapshot-ph")
+		//	_ = snapshotByName(t, client, "")
 		//		_ = snapshotByName(t, client, "definitely-not-there")
 		/*		_ = volumeCreate(t, client, volumeName)
 				_ = volumeCreate(t, client, volumeName2)
@@ -360,4 +363,34 @@ func snapshotByName(
 	t.FailNow()
 	t.Error("failed snapshotByName")
 	return nil
+}
+
+func volumeSnapshot(
+	t *testing.T, client types.Client,
+	volumeID, snapshotName string) *types.Snapshot {
+	log.WithField("snapshotName", snapshotName).Info("creating snapshot")
+
+	/*
+		opts := map[string]interface{}{
+			"priority": 2,
+			"owner":    "root@example.com",
+		}*/
+
+	volumeSnapshotRequest := &types.VolumeSnapshotRequest{
+		SnapshotName: snapshotName,
+		//	Opts: opts,
+	}
+
+	reply, err := client.API().VolumeSnapshot(nil, ec2.Name,
+		volumeID, volumeSnapshotRequest)
+	assert.NoError(t, err)
+	if err != nil {
+		t.FailNow()
+		t.Error("failed snapshotCreate")
+	}
+	apitests.LogAsJSON(reply, t)
+
+	assert.Equal(t, snapshotName, reply.Name)
+	assert.Equal(t, volumeID, reply.VolumeID)
+	return reply
 }

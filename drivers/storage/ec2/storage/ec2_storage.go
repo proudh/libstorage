@@ -286,12 +286,46 @@ func (d *driver) VolumeCopy(
 }
 
 // VolumeSnapshot snapshots a volume.
-// TODO Not implemented yet
+// TODO WiP
 func (d *driver) VolumeSnapshot(
 	ctx types.Context,
 	volumeID, snapshotName string,
 	opts types.Store) (*types.Snapshot, error) {
-	return nil, types.ErrNotImplemented
+
+	// no volume ID inputted
+	if volumeID == "" {
+		return nil, goof.New("missing volume id")
+	}
+
+	csInput := &awsec2.CreateSnapshotInput{
+		VolumeId: &volumeID,
+	}
+
+	resp, err := d.ec2Instance.CreateSnapshot(csInput)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = d.createTags(*resp.SnapshotId, snapshotName); err != nil {
+		return &types.Snapshot{}, goof.WithError(
+			"Error creating tags", err)
+	}
+
+	log.Println("Waiting for snapshot to complete")
+	err = d.waitSnapshotComplete(ctx, *resp.SnapshotId)
+	if err != nil {
+		return &types.Snapshot{}, goof.WithError(
+			"Error waiting for snapshot creation", err)
+	}
+
+	snapshot, err := d.SnapshotInspect(ctx, *resp.SnapshotId, nil)
+	if err != nil {
+		return &types.Snapshot{}, goof.WithError(
+			"Error getting snapshot", err)
+	}
+
+	log.Println("Created Snapshot: " + snapshot.ID)
+	return snapshot, nil
 }
 
 // VolumeRemove removes a volume.
@@ -481,8 +515,118 @@ func (d *driver) SnapshotInspect(
 	return snapshots[0], nil
 }
 
+// TODO WiP
+/*
+func (d *driver) CopySnapshot(runAsync bool,
+	volumeID, snapshotID, snapshotName, destinationSnapshotName,
+	destinationRegion string) (*core.Snapshot, error) {
+		if volumeID == "" && snapshotID == "" && snapshotName == "" {
+			return nil, goof.New("Missing volumeID, snapshotID, or snapshotName")
+		}
+
+		if destinationRegion == "" {
+			destinationRegion = d.instanceDocument.Region
+		}
+
+		snapshots, err := d.getSnapshot(volumeID, snapshotID, snapshotName)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(snapshots) > 1 {
+			return nil, errors.ErrMultipleVolumesReturned
+		} else if len(snapshots) == 0 {
+			return nil, errors.ErrNoVolumesReturned
+		}
+
+		snapshotID = *(snapshots[0]).SnapshotId
+
+		options := &ec2.CopySnapshotInput{
+			SourceRegion:      &d.instanceDocument.Region,
+			DestinationRegion: &destinationRegion,
+			SourceSnapshotId:  &snapshotID,
+			Description: aws.String(fmt.Sprintf("[Copied %s from %s]",
+				snapshotID, d.instanceDocument.Region)),
+		}
+		resp := &ec2.CopySnapshotOutput{}
+
+		destec2Instance := ec2.New(
+			session.New(),
+			aws.NewConfig().WithCredentials(d.ec2creds).WithRegion(destinationRegion),
+		)
+
+		origec2Instance := d.ec2Instance
+		d.ec2Instance = destec2Instance
+		defer func() { d.ec2Instance = origec2Instance }()
+
+		resp, err = d.ec2Instance.CopySnapshot(options)
+		if err != nil {
+			return nil, err
+		}
+
+		if destinationSnapshotName != "" || d.ec2Tag != "" {
+
+			var ctInput *ec2.CreateTagsInput
+			initCTInput := func() {
+				if ctInput != nil {
+					return
+				}
+				ctInput = &ec2.CreateTagsInput{
+					Resources: []*string{resp.SnapshotId},
+					Tags:      []*ec2.Tag{},
+				}
+			}
+
+			if destinationSnapshotName != "" {
+				initCTInput()
+				ctInput.Tags = append(
+					ctInput.Tags,
+					&ec2.Tag{
+						Key:   aws.String("Name"),
+						Value: &destinationSnapshotName,
+					})
+			}
+
+			if d.ec2Tag != "" {
+				initCTInput()
+				ctInput.Tags = append(
+					ctInput.Tags,
+					&ec2.Tag{
+						Key:   aws.String(rexrayTag),
+						Value: &d.ec2Tag,
+					})
+			}
+
+			_, err = d.ec2Instance.CreateTags(ctInput)
+
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		if !runAsync {
+			log.WithFields(log.Fields{
+				"moduleName":      d.r.Context,
+				"driverName":      d.Name(),
+				"runAsync":        runAsync,
+				"resp.SnapshotId": resp.SnapshotId}).Info("waiting for snapshot to complete")
+
+			err = d.waitSnapshotComplete(*resp.SnapshotId)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		snapshot, err := d.GetSnapshot("", *resp.SnapshotId, "")
+		if err != nil {
+			return nil, err
+		}
+
+		return snapshot[0], nil
+}*/
+
 // SnapshotCopy copies an existing snapshot.
-// TODO Not implemented
+// TODO WiP
 func (d *driver) SnapshotCopy(
 	ctx types.Context,
 	snapshotID, snapshotName, destinationID string,
@@ -794,7 +938,8 @@ func (d *driver) GetVolumeMapping() ([]*types.VolumeDevice, error) {
 	return BlockDevices, nil
 }
 
-func (d *driver) getBlockDevices(instanceID string) ([]*awsec2.InstanceBlockDeviceMapping, error) {
+func (d *driver) getBlockDevices(
+	instanceID string) ([]*awsec2.InstanceBlockDeviceMapping, error) {
 
 	instance, err := d.getInstance()
 	if err != nil {
@@ -827,15 +972,19 @@ func (d *driver) createVolume(ctx types.Context, volumeName string,
 	var resp *awsec2.Volume
 
 	if resp, err = d.ec2Instance.CreateVolume(options); err != nil {
-		return &awsec2.Volume{}, goof.WithError("Error creating volume", err)
+		return &awsec2.Volume{}, goof.WithError(
+			"Error creating volume", err)
 	}
 
-	if err = d.createVolumeCreateTags(volumeName, resp); err != nil {
-		return &awsec2.Volume{}, goof.WithError("Error creating tags", err)
+	if err = d.createTags(*resp.VolumeId, volumeName); err != nil {
+		return &awsec2.Volume{}, goof.WithError(
+			"Error creating tags", err)
 	}
 
-	if err = d.waitVolumeComplete(ctx, *resp.VolumeId, WaitVolumeCreate); err != nil {
-		return &awsec2.Volume{}, goof.WithError("Error waiting for volume creation", err)
+	if err = d.waitVolumeComplete(
+		ctx, *resp.VolumeId, WaitVolumeCreate); err != nil {
+		return &awsec2.Volume{}, goof.WithError(
+			"Error waiting for volume creation", err)
 	}
 	return resp, nil
 }
@@ -847,32 +996,25 @@ func (d *driver) createVolumeEnsureAvailabilityZone(
 	}
 }
 
-func (d *driver) createVolumeCreateTags(
-	volumeName string, resp *awsec2.Volume) (err error) {
-	/*	if volumeName == "" && d.ec2Tag == "" {
-			return
-		}
-	*/
+func (d *driver) createTags(id, name string) (err error) {
 	var ctInput *awsec2.CreateTagsInput
 	initCTInput := func() {
 		if ctInput != nil {
 			return
 		}
 		ctInput = &awsec2.CreateTagsInput{
-			Resources: []*string{resp.VolumeId},
+			Resources: []*string{&id},
 			Tags:      []*awsec2.Tag{},
 		}
 	}
 
-	if volumeName != "" {
-		initCTInput()
-		ctInput.Tags = append(
-			ctInput.Tags,
-			&awsec2.Tag{
-				Key:   aws.String("Name"),
-				Value: &volumeName,
-			})
-	}
+	initCTInput()
+	ctInput.Tags = append(
+		ctInput.Tags,
+		&awsec2.Tag{
+			Key:   aws.String("Name"),
+			Value: &name,
+		})
 
 	/*	if d.ec2Tag != "" {
 			initCTInput()
@@ -886,12 +1028,13 @@ func (d *driver) createVolumeCreateTags(
 	*/
 	_, err = d.ec2Instance.CreateTags(ctInput)
 	if err != nil {
-		return err
+		return goof.WithError("Error creating tags", err)
 	}
 	return nil
 }
 
-func (d *driver) waitVolumeComplete(ctx types.Context, volumeID string, action string) error {
+func (d *driver) waitVolumeComplete(
+	ctx types.Context, volumeID string, action string) error {
 	if volumeID == "" {
 		return goof.New("Missing volume ID")
 	}
@@ -913,9 +1056,35 @@ UpdateLoop:
 				break UpdateLoop
 			}
 		case WaitVolumeAttach:
-			if len(volumes[0].Attachments) == 1 && *volumes[0].Attachments[0].State == awsec2.VolumeAttachmentStateAttached {
+			if len(volumes[0].Attachments) == 1 &&
+				*volumes[0].Attachments[0].State == awsec2.VolumeAttachmentStateAttached {
 				break UpdateLoop
 			}
+		}
+		time.Sleep(1 * time.Second)
+	}
+
+	return nil
+}
+
+func (d *driver) waitSnapshotComplete(
+	ctx types.Context, snapshotID string) error {
+	for {
+		snapshots, err := d.getSnapshot(ctx, "", snapshotID, "")
+		if err != nil {
+			return goof.WithError(
+				"Error getting snapshot", err)
+		}
+
+		if len(snapshots) == 0 {
+			return goof.New("No snapshots found")
+		}
+		snapshot := snapshots[0]
+		if *snapshot.State == awsec2.SnapshotStateCompleted {
+			break
+		}
+		if *snapshot.State == awsec2.SnapshotStateError {
+			return goof.Newf("Snapshot state error: %s", *snapshot.StateMessage)
 		}
 		time.Sleep(1 * time.Second)
 	}
