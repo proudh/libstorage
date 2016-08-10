@@ -61,14 +61,19 @@ func TestVolumes(t *testing.T) {
 	}
 
 	tf := func(config gofig.Config, client types.Client, t *testing.T) {
-		_ = volumeCreate(t, client, volumeName)
-		_ = volumeCreate(t, client, volumeName2)
+		//		_ = snapshotInspect(t, client, "snap-ef672315")
+		_ = snapshotByName(t, client, "mc-server-snapshot-ph")
+		_ = snapshotByName(t, client, "")
+		//		_ = snapshotByName(t, client, "definitely-not-there")
+		/*		_ = volumeCreate(t, client, volumeName)
+				_ = volumeCreate(t, client, volumeName2)
 
-		vol1 := volumeByName(t, client, volumeName)
-		vol2 := volumeByName(t, client, volumeName2)
+				vol1 := volumeByName(t, client, volumeName)
+				vol2 := volumeByName(t, client, volumeName2)
 
-		volumeRemove(t, client, vol1.ID)
-		volumeRemove(t, client, vol2.ID)
+				volumeRemove(t, client, vol1.ID)
+				volumeRemove(t, client, vol2.ID)
+		*/
 	}
 	apitests.Run(t, ec2.Name, configYAML, tf)
 }
@@ -322,4 +327,37 @@ func volumeDetach(
 	apitests.LogAsJSON(reply, t)
 	assert.Len(t, reply.Attachments, 0)
 	return reply
+}
+
+func snapshotInspect(
+	t *testing.T, client types.Client, snapshotID string) *types.Snapshot {
+	log.WithField("snapshotID", snapshotID).Info("inspecting snapshot")
+	reply, err := client.API().SnapshotInspect(nil, ec2.Name, snapshotID)
+	assert.NoError(t, err)
+
+	if err != nil {
+		t.Error("failed snapshotInspect")
+		t.FailNow()
+	}
+	apitests.LogAsJSON(reply, t)
+	return reply
+}
+
+func snapshotByName(
+	t *testing.T, client types.Client, snapshotName string) *types.Snapshot {
+	log.WithField("snapshotName", snapshotName).Info("get snapshot by ec2.Name")
+	snapshots, err := client.API().Snapshots(nil)
+	assert.NoError(t, err)
+	if err != nil {
+		t.FailNow()
+	}
+	assert.Contains(t, snapshots, ec2.Name)
+	for _, vol := range snapshots[ec2.Name] {
+		if vol.Name == snapshotName {
+			return vol
+		}
+	}
+	t.FailNow()
+	t.Error("failed snapshotByName")
+	return nil
 }
