@@ -61,9 +61,13 @@ func TestVolumes(t *testing.T) {
 	}
 
 	tf := func(config gofig.Config, client types.Client, t *testing.T) {
-		_ = volumeSnapshot(t, client, "vol-992ca510", "ls-test-snap-ph")
-		snap1 := snapshotByName(t, client, "ls-test-snap-ph")
-		_ = snapshotInspect(t, client, snap1.ID)
+		//_ = volumeSnapshot(t, client, "vol-992ca510", "ls-test-snap-ph")
+		//	vol1 := volumeCreate(t, client, "ls-test-vol-ph")
+		//	origSnap := volumeSnapshot(t, client, vol1.ID, "ls-test-snap2-ph")
+		_ = snapshotCopy(t, client, "snap-3df339c1", "ls-test-snap2-ph", "")
+		snapCopy := snapshotByName(t, client, "Copy of ls-test-snap2-ph")
+		_ = snapshotInspect(t, client, snapCopy.ID)
+		_ = snapshotInspect(t, client, "snap-3df339c1")
 		//		_ = snapshotInspect(t, client, "snap-ef672315")
 		//	_ = snapshotByName(t, client, "mc-server-snapshot-ph")
 		//	_ = snapshotByName(t, client, "")
@@ -392,5 +396,29 @@ func volumeSnapshot(
 
 	assert.Equal(t, snapshotName, reply.Name)
 	assert.Equal(t, volumeID, reply.VolumeID)
+	return reply
+}
+
+func snapshotCopy(
+	t *testing.T, client types.Client,
+	snapshotID, snapshotName, destinationID string) *types.Snapshot {
+	log.WithField("snapshotName", snapshotName).Info("copying snapshot")
+
+	snapshotCopyRequest := &types.SnapshotCopyRequest{
+		SnapshotName: snapshotName,
+		//DestinationID: destinationID,
+		//	Opts: opts,
+	}
+
+	reply, err := client.API().SnapshotCopy(nil, ec2.Name,
+		snapshotID, snapshotCopyRequest)
+	assert.NoError(t, err)
+	if err != nil {
+		t.FailNow()
+		t.Error("failed snapshotCopy")
+	}
+	apitests.LogAsJSON(reply, t)
+
+	assert.Equal(t, "Copy of "+snapshotName, reply.Name)
 	return reply
 }
