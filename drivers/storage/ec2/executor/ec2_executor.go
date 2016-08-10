@@ -67,6 +67,8 @@ func (d *driver) InstanceID(
 	return iid, nil
 }
 
+// NextDevice returns the next available device.
+// TODO not implemented yet
 func (d *driver) NextDevice(
 	ctx types.Context,
 	opts types.Store) (string, error) {
