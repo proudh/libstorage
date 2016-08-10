@@ -186,10 +186,13 @@ func (d *driver) Volumes(
 	opts *types.VolumesOpts) ([]*types.Volume, error) {
 	// Get all volumes (and their attachments if specified)
 	ec2vols, err := d.getVolume(ctx, "", "")
-	vols := d.convertToTypesVolume(ec2vols, opts.Attachments)
 	if err != nil {
 		return nil, err
 	}
+	if len(ec2vols) == 0 {
+		return nil, goof.New("no volumes returned")
+	}
+	vols := d.toTypesVolume(ec2vols, opts.Attachments)
 	return vols, nil
 }
 
@@ -200,14 +203,13 @@ func (d *driver) VolumeInspect(
 	opts *types.VolumeInspectOpts) (*types.Volume, error) {
 	// Get volume corresponding to volume ID
 	ec2vols, err := d.getVolume(ctx, volumeID, "")
-	vols := d.convertToTypesVolume(ec2vols, opts.Attachments)
-
 	if err != nil {
 		return nil, err
 	}
-	if len(vols) == 0 {
+	if len(ec2vols) == 0 {
 		return nil, goof.New("no volumes returned")
 	}
+	vols := d.toTypesVolume(ec2vols, opts.Attachments)
 
 	// Because getVolume returns an array
 	// and we only expect the 1st element to be a match, return 1st element
@@ -226,7 +228,7 @@ func (d *driver) VolumeCreate(ctx types.Context, volumeName string,
 
 	// check if volume with same name exists
 	ec2vols, err := d.getVolume(ctx, "", volumeName)
-	volumes := d.convertToTypesVolume(ec2vols, false)
+	volumes := d.toTypesVolume(ec2vols, false)
 	if err != nil {
 		return nil, err
 	}
@@ -337,7 +339,7 @@ func (d *driver) VolumeAttach(
 
 	// review volume with attachments to any host
 	ec2vols, err := d.getVolume(ctx, volumeID, "")
-	volumes := d.convertToTypesVolume(ec2vols, true)
+	volumes := d.toTypesVolume(ec2vols, true)
 	if err != nil {
 		return nil, "", goof.WithError("Error getting volume", err)
 	}
@@ -396,7 +398,7 @@ func (d *driver) VolumeDetach(
 	}
 
 	ec2vols, err := d.getVolume(ctx, volumeID, "")
-	volumes := d.convertToTypesVolume(ec2vols, true)
+	volumes := d.toTypesVolume(ec2vols, true)
 
 	if err != nil {
 		return nil, err
@@ -444,20 +446,39 @@ func (d *driver) VolumeDetach(
 }
 
 // Snapshots returns all volumes or a filtered list of snapshots.
-// TODO Not implemented
 func (d *driver) Snapshots(
 	ctx types.Context,
 	opts types.Store) ([]*types.Snapshot, error) {
-	return nil, nil
+	// Get all snapshots
+	ec2snapshots, err := d.getSnapshot(ctx, "", "", "")
+	if err != nil {
+		return nil, err
+	}
+	if len(ec2snapshots) == 0 {
+		return nil, goof.New("no snapshots returned")
+	}
+	snapshots := d.toTypesSnapshot(ec2snapshots)
+	return snapshots, nil
 }
 
 // SnapshotInspect inspects a single snapshot.
-// TODO Not implemented
 func (d *driver) SnapshotInspect(
 	ctx types.Context,
 	snapshotID string,
 	opts types.Store) (*types.Snapshot, error) {
-	return nil, nil
+	// Get snapshot corresponding to snapshot ID
+	ec2snapshots, err := d.getSnapshot(ctx, "", snapshotID, "")
+	if err != nil {
+		return nil, err
+	}
+	if len(ec2snapshots) == 0 {
+		return nil, goof.New("no snapshots returned")
+	}
+	snapshots := d.toTypesSnapshot(ec2snapshots)
+
+	// Because getSnapshot returns an array
+	// and we only expect the 1st element to be a match, return 1st element
+	return snapshots[0], nil
 }
 
 // SnapshotCopy copies an existing snapshot.
@@ -522,7 +543,7 @@ func (d *driver) getVolume(
 	return resp.Volumes, nil
 }
 
-func (d *driver) convertToTypesVolume(
+func (d *driver) toTypesVolume(
 	ec2vols []*awsec2.Volume, attachments bool) []*types.Volume {
 	var volumesSD []*types.Volume
 	for _, volume := range ec2vols {
@@ -559,6 +580,67 @@ func (d *driver) convertToTypesVolume(
 		volumesSD = append(volumesSD, volumeSD)
 	}
 	return volumesSD
+}
+
+func (d *driver) getSnapshot(
+	ctx types.Context,
+	volumeID, snapshotID, snapshotName string) ([]*awsec2.Snapshot, error) {
+	filters := []*awsec2.Filter{}
+	if snapshotName != "" {
+		filters = append(filters, &awsec2.Filter{
+			Name: aws.String("tag:Name"), Values: []*string{&snapshotName}})
+	}
+
+	if volumeID != "" {
+		filters = append(filters, &awsec2.Filter{
+			Name: aws.String("volume-id"), Values: []*string{&volumeID}})
+	}
+
+	if snapshotID != "" {
+		//using SnapshotIds in request is returning stale data
+		filters = append(filters, &awsec2.Filter{
+			Name: aws.String("snapshot-id"), Values: []*string{&snapshotID}})
+	}
+
+	/*	if d.ec2Tag != "" {
+		filters = append(filters, &ec2.Filter{
+			Name:   aws.String(fmt.Sprintf("tag:%s", rexrayTag)),
+			Values: []*string{&d.ec2Tag}})
+	}*/
+
+	dsInput := &awsec2.DescribeSnapshotsInput{}
+
+	if len(filters) > 0 {
+		dsInput.Filters = filters
+	}
+
+	resp, err := d.ec2Instance.DescribeSnapshots(dsInput)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp.Snapshots, nil
+}
+
+func (d *driver) toTypesSnapshot(
+	ec2snapshots []*awsec2.Snapshot) []*types.Snapshot {
+	var snapshotsInt []*types.Snapshot
+	for _, snapshot := range ec2snapshots {
+		name := getName(snapshot.Tags)
+		snapshotSD := &types.Snapshot{
+			Name:        name,
+			VolumeID:    *snapshot.VolumeId,
+			ID:          *snapshot.SnapshotId,
+			VolumeSize:  *snapshot.VolumeSize,
+			StartTime:   (*snapshot.StartTime).Unix(),
+			Description: *snapshot.Description,
+			Status:      *snapshot.State,
+		}
+		snapshotsInt = append(snapshotsInt, snapshotSD)
+	}
+
+	// log.Println("Got Snapshots: " + fmt.Sprintf("%+v", snapshotsInt))
+	return snapshotsInt
 }
 
 // Used in VolumeAttach
