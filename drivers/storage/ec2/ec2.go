@@ -18,7 +18,7 @@ func registerConfig() {
 	r.Key(gofig.String, "", "", "", "ec2.accessKey")
 	r.Key(gofig.String, "", "", "", "ec2.secretKey")
 	r.Key(gofig.String, "", "", "", "ec2.region")
+	r.Key(gofig.String, "", "", "", "ec2.endpoint")
 	r.Key(gofig.String, "", "", "", "ec2.rexrayTag")
 	gofig.Register(r)
 }
-

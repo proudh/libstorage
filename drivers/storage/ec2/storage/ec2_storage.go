@@ -113,10 +113,9 @@ func (d *driver) Init(context types.Context, config gofig.Config) error {
 		region = d.instanceDocument.Region
 	}
 
-	var endpoint string
-	//endpoint := d.endpoint()
+	endpoint := d.endpoint()
 	if endpoint == "" {
-		endpoint = "ec2.us-west-2.amazonaws.com"
+		endpoint = fmt.Sprintf("ec2.%s.amazonaws.com", region)
 	}
 
 	//	d.ec2Tag = d.rexrayTag()
@@ -126,7 +125,6 @@ func (d *driver) Init(context types.Context, config gofig.Config) error {
 	d.awsCreds = credentials.NewChainCredentials(
 		[]credentials.Provider{
 			&credentials.StaticProvider{Value: credentials.Value{AccessKeyID: d.accessKey(), SecretAccessKey: d.secretKey()}},
-			//	&credentials.StaticProvider{Value: credentials.Value{AccessKeyID: os.Getenv("AWS_ACCESS_KEY_ID"), SecretAccessKey: os.Getenv("AWS_SECRET_ACCESS_KEY")}},
 			&credentials.EnvProvider{},
 			&credentials.SharedCredentialsProvider{},
 			&ec2rolecreds.EC2RoleProvider{
@@ -1205,6 +1203,10 @@ func (d *driver) secretKey() string {
 
 func (d *driver) region() string {
 	return d.config.GetString("ec2.region")
+}
+
+func (d *driver) endpoint() string {
+	return d.config.GetString("ec2.endpoint")
 }
 
 /*func (d *driver) rexrayTag() string {

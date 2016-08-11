@@ -1,6 +1,7 @@
 package ec2
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -10,24 +11,24 @@ import (
 	"github.com/akutz/gofig"
 	"github.com/stretchr/testify/assert"
 
-	//"github.com/emccode/libstorage/api/context"
-	//"github.com/emccode/libstorage/api/registry"
+	//	"github.com/emccode/libstorage/api/context"
+	//	"github.com/emccode/libstorage/api/registry"
 	"github.com/emccode/libstorage/api/server"
 	apitests "github.com/emccode/libstorage/api/tests"
 	"github.com/emccode/libstorage/api/types"
-	//"github.com/emccode/libstorage/api/utils"
+	//	"github.com/emccode/libstorage/api/utils"
 	"github.com/emccode/libstorage/drivers/storage/ec2"
-	//ec2x "github.com/emccode/libstorage/drivers/storage/ec2/executor"
+	//	ec2x "github.com/emccode/libstorage/drivers/storage/ec2/executor"
 )
 
 // Put contents of sample config.yml here
 var (
-	configYAML = []byte(`
-ec2:
-  tag: integrationtest
-  region: us-west-2
-  securityGroups: minecraft-server-group`)
-)
+	configYAML = []byte(``)
+	/*	configYAML = []byte(`
+		ec2:
+		  region: us-west-2
+		  endpoint: ec2.us-west-2.amazonaws.com`)
+	*/)
 
 var volumeName string
 var volumeName2 string
@@ -61,6 +62,8 @@ func TestVolumes(t *testing.T) {
 	}
 
 	tf := func(config gofig.Config, client types.Client, t *testing.T) {
+		vol := volumeByName(t, client, "ls-test-vol-ph")
+		fmt.Println(vol.ID)
 		/*snapshotRemove(t, client, "snap-11839557")
 		vol1 := volumeCreateFromSnapshot(t, client, "snap-3df339c1", "ls-test-snap2-ph")
 		_ = volumeCopy(t, client, "vol-8efba507", "ls-test-copy-ph")
@@ -116,6 +119,7 @@ func TestVolumes(t *testing.T) {
 		}).Test)
 
 }
+
 
 // same everywhere
 func TestServices(t *testing.T) {
