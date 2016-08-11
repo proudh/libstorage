@@ -268,7 +268,6 @@ func (d *driver) VolumeCreate(ctx types.Context, volumeName string,
 }
 
 // VolumeCreateFromSnapshot creates a new volume from an existing snapshot.
-// TODO WiP
 func (d *driver) VolumeCreateFromSnapshot(
 	ctx types.Context,
 	snapshotID, volumeName string,
@@ -285,7 +284,8 @@ func (d *driver) VolumeCreateFromSnapshot(
 	ec2vols, err := d.getVolume(ctx, "", volumeName)
 	volumes := d.toTypesVolume(ec2vols, false)
 	if err != nil {
-		return nil, err
+		return &types.Volume{}, goof.WithError(
+			"error getting volume", err)
 	}
 
 	if len(volumes) > 0 {
@@ -315,7 +315,8 @@ func (d *driver) VolumeCreateFromSnapshot(
 	// pass in parameters to helper function to create the volume
 	vol, err := d.createVolume(ctx, volumeName, snapshotID, volume)
 	if err != nil {
-		return nil, err
+		return &types.Volume{}, goof.WithError(
+			"error creating volume", err)
 	}
 	// return the volume created
 	return d.VolumeInspect(ctx, *vol.VolumeId, &types.VolumeInspectOpts{
@@ -324,14 +325,19 @@ func (d *driver) VolumeCreateFromSnapshot(
 }
 
 // VolumeCopy copies an existing volume.
-// TODO WiP
 func (d *driver) VolumeCopy(
 	ctx types.Context,
 	volumeID, volumeName string,
 	opts types.Store) (*types.Volume, error) {
-	if volumeID == "" && volumeName == "" {
-		return &types.Volume{}, goof.New(
-			"missing volume id or volume name")
+	var (
+		ec2vols  []*awsec2.Volume
+		err      error
+		snapshot *types.Snapshot
+		vol      *types.Volume
+	)
+
+	if volumeID == "" {
+		return &types.Volume{}, goof.New("missing volume id")
 	}
 
 	fields := map[string]interface{}{
@@ -342,36 +348,53 @@ func (d *driver) VolumeCopy(
 
 	log.WithFields(fields).Debug("creating volume from snapshot")
 
-	// get volume using volumeID and/or volumeName
-	ec2vols, err := d.getVolume(ctx, volumeID, volumeName)
+	// check if volume with same name exists
+	ec2VolsToCheck, err := d.getVolume(ctx, "", volumeName)
+	volsToCheck := d.toTypesVolume(ec2VolsToCheck, false)
 	if err != nil {
-		return nil, goof.WithErr("error getting volume", err)
+		return &types.Volume{}, goof.WithError(
+			"error getting volume", err)
+	}
+
+	if len(volsToCheck) > 0 {
+		return nil, goof.WithFields(goof.Fields{
+			"moduleName": d.Name(),
+			"driverName": d.Name(),
+			"volumeName": volumeName}, "volume name already exists")
+	}
+
+	// get volume using volumeID and/or volumeName
+	ec2vols, err = d.getVolume(ctx, volumeID, "")
+	if err != nil {
+		return &types.Volume{}, goof.WithError(
+			"error getting volume", err)
 	}
 	volumes := d.toTypesVolume(ec2vols, false)
 	if len(volumes) > 1 {
 		return &types.Volume{},
 			goof.New("multiple volumes returned")
 	} else if len(volumes) == 0 {
-		return &types.Volumes{}, goof.New("no volumes returned")
+		return &types.Volume{}, goof.New("no volumes returned")
 	}
 
 	// create snapshot from volumeID
-	snapshotName = fmt.Sprintf("temp-snap-%s", volumeID)
-	if snapshot, err = VolumeSnapshot(ctx, volumeID, snapshotName, ""); err != nil {
+	snapshotName := fmt.Sprintf("temp-snap-%s", volumeID)
+	snapshot, err = d.VolumeSnapshot(ctx, volumeID, snapshotName, opts)
+	if err != nil {
 		return &types.Volume{}, goof.WithError(
 			"error creating temporary snapshot", err)
 	}
 
 	// use temporary snapshot to create volume
-	volCopyName := fmt.Sprintf("Copy of %s", volumeName)
-	if vol, err = VolumeCreateFromSnapshot(
-		ctx, snapshot.ID, volCopyName, ""); err != nil {
+	vol, err = d.VolumeCreateFromSnapshot(ctx, snapshot.ID,
+		volumeName, &types.VolumeCreateOpts{Opts: opts})
+	if err != nil {
 		return &types.Volume{}, goof.WithError(
 			"error creating volume copy from snapshot", err)
 	}
 
 	// remove temp snapshot created
-	if err = SnapshotRemove(ctx, snapshotID, ""); err != nil {
+	if err = d.SnapshotRemove(ctx, snapshot.ID, opts); err != nil {
 		return &types.Volume{}, goof.WithError(
 			"error removing temporary snapshot", err)
 	}
@@ -614,12 +637,11 @@ func (d *driver) SnapshotCopy(
 	ctx types.Context,
 	snapshotID, snapshotName, destinationID string,
 	opts types.Store) (*types.Snapshot, error) {
-	if snapshotID == "" && snapshotName == "" {
-		return &types.Snapshot{},
-			goof.New("Missing snapshotID or snapshotName")
+	if snapshotID == "" {
+		return &types.Snapshot{}, goof.New("Missing snapshotID")
 	}
 
-	origSnapshots, err := d.getSnapshot(ctx, "", snapshotID, snapshotName)
+	origSnapshots, err := d.getSnapshot(ctx, "", snapshotID, "")
 	if err != nil {
 		return &types.Snapshot{},
 			goof.WithError("Error getting snapshot", err)
@@ -638,8 +660,7 @@ func (d *driver) SnapshotCopy(
 	options := &awsec2.CopySnapshotInput{
 		SourceSnapshotId: &snapshotID,
 		SourceRegion:     &d.instanceDocument.Region,
-		Description: aws.String(fmt.Sprintf(
-			"Copy of %s (%s)", snapshotName, snapshotID)),
+		Description:      aws.String(fmt.Sprintf("Copy of %s", snapshotID)),
 	}
 	resp := &awsec2.CopySnapshotOutput{}
 
@@ -648,8 +669,7 @@ func (d *driver) SnapshotCopy(
 		return nil, err
 	}
 
-	destSnapshotName := fmt.Sprintf("Copy of %s", snapshotName)
-	if err = d.createTags(*resp.SnapshotId, destSnapshotName); err != nil {
+	if err = d.createTags(*resp.SnapshotId, snapshotName); err != nil {
 		return &types.Snapshot{}, goof.WithError(
 			"Error creating tags", err)
 	}
@@ -657,6 +677,7 @@ func (d *driver) SnapshotCopy(
 	log.WithFields(log.Fields{
 		"moduleName":      d.Name(),
 		"driverName":      d.Name(),
+		"snapshotName":    snapshotName,
 		"resp.SnapshotId": *resp.SnapshotId}).Info("waiting for snapshot to complete")
 
 	err = d.waitSnapshotComplete(ctx, *resp.SnapshotId)
@@ -862,7 +883,6 @@ func (d *driver) attachVolume(
 		return goof.New("too many volumes returned")
 	}
 
-	fmt.Println(deviceName)
 	avInput := &awsec2.AttachVolumeInput{
 		Device:     &deviceName,
 		InstanceId: &d.instanceDocument.InstanceID,
@@ -1025,7 +1045,7 @@ func (d *driver) createVolume(ctx types.Context, volumeName, snapshotID string,
 		VolumeType:       &vol.Type,
 	}
 	if snapshotID != "" {
-		options.SnapshotId = snapshotID
+		options.SnapshotId = &snapshotID
 	}
 
 	if vol.IOPS > 0 {

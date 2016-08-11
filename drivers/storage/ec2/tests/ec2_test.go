@@ -61,27 +61,17 @@ func TestVolumes(t *testing.T) {
 	}
 
 	tf := func(config gofig.Config, client types.Client, t *testing.T) {
-		snapshotRemove(t, client, "snap-b6daec4c")
-		//_ = volumeSnapshot(t, client, "vol-992ca510", "ls-test-snap-ph")
-		//	vol1 := volumeCreate(t, client, "ls-test-vol-ph")
-		//	origSnap := volumeSnapshot(t, client, vol1.ID, "ls-test-snap2-ph")
-		/*	_ = snapshotCopy(t, client, "snap-3df339c1", "ls-test-snap2-ph", "")
-			snapCopy := snapshotByName(t, client, "Copy of ls-test-snap2-ph")
-			_ = snapshotInspect(t, client, snapCopy.ID)
-			_ = snapshotInspect(t, client, "snap-3df339c1")*/
-		//		_ = snapshotInspect(t, client, "snap-ef672315")
-		//	_ = snapshotByName(t, client, "mc-server-snapshot-ph")
-		//	_ = snapshotByName(t, client, "")
-		//		_ = snapshotByName(t, client, "definitely-not-there")
-		/*		_ = volumeCreate(t, client, volumeName)
-				_ = volumeCreate(t, client, volumeName2)
-
-				vol1 := volumeByName(t, client, volumeName)
-				vol2 := volumeByName(t, client, volumeName2)
-
-				volumeRemove(t, client, vol1.ID)
-				volumeRemove(t, client, vol2.ID)
-		*/
+		/*snapshotRemove(t, client, "snap-11839557")
+		vol1 := volumeCreateFromSnapshot(t, client, "snap-3df339c1", "ls-test-snap2-ph")
+		_ = volumeCopy(t, client, "vol-8efba507", "ls-test-copy-ph")
+		vol1 := volumeCreate(t, client, "ls-test-vol-ph")
+		origSnap := volumeSnapshot(t, client, vol1.ID, "ls-test-snap2-ph")
+		_ = snapshotCopy(t, client, "snap-3df339c1", "ls-test-snap2-ph", "")
+		snapCopy := snapshotByName(t, client, "Copy of ls-test-snap2-ph")
+		_ = snapshotInspect(t, client, snapCopy.ID)
+		_ = volumeCreate(t, client, volumeName)
+		vol1 := volumeByName(t, client, volumeName)
+		volumeRemove(t, client, vol1.ID)*/
 	}
 	apitests.Run(t, ec2.Name, configYAML, tf)
 }
@@ -420,7 +410,7 @@ func snapshotCopy(
 	}
 	apitests.LogAsJSON(reply, t)
 
-	assert.Equal(t, "Copy of "+snapshotName, reply.Name)
+	assert.Equal(t, snapshotName, reply.Name)
 	return reply
 }
 
@@ -434,4 +424,75 @@ func snapshotRemove(t *testing.T, client types.Client, snapshotID string) {
 		t.Error("failed snapshotRemove")
 		t.FailNow()
 	}
+}
+
+func volumeCreateFromSnapshot(
+	t *testing.T, client types.Client,
+	snapshotID, volumeName string) *types.Volume {
+	fields := map[string]interface{}{
+		"snapshotID": snapshotID,
+		"volumeName": volumeName,
+	}
+	log.WithFields(fields).Info("creating volume from snapshot")
+	size := int64(8)
+
+	opts := map[string]interface{}{
+		"priority": 2,
+		"owner":    "root@example.com",
+	}
+
+	volumeCreateRequest := &types.VolumeCreateRequest{
+		Name: volumeName,
+		Size: &size,
+		Opts: opts,
+	}
+
+	reply, err := client.API().VolumeCreateFromSnapshot(nil,
+		ec2.Name, snapshotID, volumeCreateRequest)
+	assert.NoError(t, err)
+	if err != nil {
+		t.FailNow()
+		t.Error("failed volumeCreateFromSnapshot")
+	}
+	apitests.LogAsJSON(reply, t)
+
+	assert.Equal(t, volumeName, reply.Name)
+	assert.Equal(t, size, reply.Size)
+	assert.Equal(t, opts["priority"], 2)
+	assert.Equal(t, opts["owner"], "root@example.com")
+
+	return reply
+}
+
+func volumeCopy(
+	t *testing.T, client types.Client,
+	volumeID, volumeName string) *types.Volume {
+	fields := map[string]interface{}{
+		"volumeID":   volumeID,
+		"volumeName": volumeName,
+	}
+	log.WithFields(fields).Info("copying volume")
+
+	/*opts := map[string]interface{}{
+		"priority": 2,
+		"owner":    "root@example.com",
+	}*/
+
+	volumeCopyRequest := &types.VolumeCopyRequest{
+		VolumeName: volumeName,
+		//Opts: opts,
+	}
+
+	reply, err := client.API().VolumeCopy(nil,
+		ec2.Name, volumeID, volumeCopyRequest)
+	assert.NoError(t, err)
+	if err != nil {
+		t.FailNow()
+		t.Error("failed volumeCopy")
+	}
+	apitests.LogAsJSON(reply, t)
+
+	assert.Equal(t, volumeName, reply.Name)
+
+	return reply
 }
