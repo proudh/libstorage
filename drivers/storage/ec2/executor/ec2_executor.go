@@ -2,7 +2,6 @@ package executor
 
 import (
 	"bufio"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os/exec"
@@ -21,7 +20,6 @@ import (
 type driver struct {
 	config         gofig.Config
 	nextDeviceInfo *types.NextDeviceInfo
-	subnetResolver SubnetResolver
 }
 
 func init() {
@@ -29,9 +27,7 @@ func init() {
 }
 
 func newDriver() types.StorageExecutor {
-	return &driver{
-		subnetResolver: NewAwsVpcSubnetResolver(),
-	}
+	return &driver{}
 }
 
 func (d *driver) Init(ctx types.Context, config gofig.Config) error {
@@ -58,14 +54,19 @@ func InstanceID() (*types.InstanceID, error) {
 func (d *driver) InstanceID(
 	ctx types.Context,
 	opts types.Store) (*types.InstanceID, error) {
-	subnetID, err := d.subnetResolver.ResolveSubnet()
+	res, err := http.Get("http://169.254.169.254/latest/meta-data/instance-id/")
 	if err != nil {
-		return nil, goof.WithError("no ec2metadata subnet id", err)
+		return nil, goof.WithError("ec2 instance id lookup failed", err)
+	}
+	instanceID, err := ioutil.ReadAll(res.Body)
+	res.Body.Close()
+	if err != nil {
+		return nil, goof.WithError("error reading ec2 instance id", err)
 	}
 
 	iid := &types.InstanceID{Driver: ec2.Name}
-	if err := iid.MarshalMetadata(subnetID); err != nil {
-		return nil, err
+	if err := iid.MarshalMetadata(string(instanceID)); err != nil {
+		return nil, goof.WithError("error marshalling instance id", err)
 	}
 
 	return iid, nil
@@ -144,6 +145,7 @@ func (d *driver) LocalDevices(
 	}, nil
 }
 
+/*
 // SubnetResolver defines interface that can resolve subnet from environment
 type SubnetResolver interface {
 	ResolveSubnet() (string, error)
@@ -190,4 +192,4 @@ func NewAwsVpcSubnetResolver() *AwsVpcSubnetResolver {
 	return &AwsVpcSubnetResolver{
 		ec2MetadataIPAddress: "169.254.169.254",
 	}
-}
+}*/
