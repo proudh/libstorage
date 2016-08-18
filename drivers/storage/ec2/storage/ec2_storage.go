@@ -169,11 +169,11 @@ func (d *driver) InstanceInspect(
 	}
 
 	// Decode metadata from instance ID to get subnet ID
-	var awsSubnetID string
-	if err := iid.UnmarshalMetadata(&awsSubnetID); err != nil {
+	var awsInstanceID string
+	if err := iid.UnmarshalMetadata(&awsInstanceID); err != nil {
 		return nil, err
 	}
-	instanceID := &types.InstanceID{ID: awsSubnetID, Driver: d.Name()}
+	instanceID := &types.InstanceID{ID: awsInstanceID, Driver: d.Name()}
 
 	return &types.Instance{InstanceID: instanceID}, nil
 }
@@ -185,7 +185,7 @@ func (d *driver) Volumes(
 	// Get all volumes (and their attachments if specified)
 	ec2vols, err := d.getVolume(ctx, "", "")
 	if err != nil {
-		return nil, err
+		return nil, goof.WithError("Error getting volume", err)
 	}
 	if len(ec2vols) == 0 {
 		return nil, goof.New("no volumes returned")
@@ -202,7 +202,7 @@ func (d *driver) VolumeInspect(
 	// Get volume corresponding to volume ID
 	ec2vols, err := d.getVolume(ctx, volumeID, "")
 	if err != nil {
-		return nil, err
+		return nil, goof.WithError("Error getting volume", err)
 	}
 	if len(ec2vols) == 0 {
 		return nil, goof.New("no volumes returned")
@@ -770,8 +770,20 @@ func (d *driver) toTypesVolume(
 	var volumesSD []*types.Volume
 	for _, volume := range ec2vols {
 		var attachmentsSD []*types.VolumeAttachment
+		for _, attachment := range volume.Attachments {
+			deviceName := ""
+			if attachments {
+				deviceName = *attachment.Device
+			}
+			attachmentSD := &types.VolumeAttachment{
+				VolumeID:   *attachment.VolumeId,
+				InstanceID: &types.InstanceID{ID: *attachment.InstanceId, Driver: ec2.Name},
+				DeviceName: deviceName,
+				Status:     *attachment.State,
+			}
+			attachmentsSD = append(attachmentsSD, attachmentSD)
+		}
 		name := d.getName(volume.Tags)
-
 		volumeSD := &types.Volume{
 			Name:             name,
 			ID:               *volume.VolumeId,
@@ -779,21 +791,7 @@ func (d *driver) toTypesVolume(
 			Status:           *volume.State,
 			Type:             *volume.VolumeType,
 			Size:             *volume.Size,
-		}
-		if attachments {
-			for _, attachment := range volume.Attachments {
-				attachmentSD := &types.VolumeAttachment{
-					VolumeID:   *attachment.VolumeId,
-					InstanceID: &types.InstanceID{ID: *attachment.InstanceId, Driver: ec2.Name},
-					DeviceName: *attachment.Device,
-					Status:     *attachment.State,
-				}
-				attachmentsSD = append(attachmentsSD, attachmentSD)
-			}
-
-			if len(attachmentsSD) > 0 {
-				volumeSD.Attachments = attachmentsSD
-			}
+			Attachments:      attachmentsSD,
 		}
 		// Some volume types have no IOPS, so we get nil in volume.Iops
 		if volume.Iops != nil {

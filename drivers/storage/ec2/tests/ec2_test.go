@@ -62,7 +62,8 @@ func TestVolumes(t *testing.T) {
 	}
 
 	tf := func(config gofig.Config, client types.Client, t *testing.T) {
-		vol := volumeByName(t, client, "ls-test-vol-ph")
+		//vol := volumeInspect(t, client, "vol-d70b7b5e")
+		vol := volumeByName(t, client, "ph-ls-test-root")
 		fmt.Println(vol.ID)
 		/*snapshotRemove(t, client, "snap-11839557")
 		vol1 := volumeCreateFromSnapshot(t, client, "snap-3df339c1", "ls-test-snap2-ph")
@@ -79,9 +80,10 @@ func TestVolumes(t *testing.T) {
 	apitests.Run(t, ec2.Name, configYAML, tf)
 }
 
+/*
 // Isilon and ScaleIO just check result of InstanceID();
 // VBox and EFS fill in InstanceID completely then check it
-/*func TestInstanceID(t *testing.T) {
+func TestInstanceID(t *testing.T) {
 	// create storage driver
 	sd, err := registry.NewStorageDriver(ec2.Name)
 	if err != nil {
@@ -109,6 +111,7 @@ func TestVolumes(t *testing.T) {
 	}
 
 	iid = i.InstanceID
+	fmt.Println(iid)
 
 	// test resulting InstanceID
 	apitests.Run(
@@ -119,7 +122,6 @@ func TestVolumes(t *testing.T) {
 		}).Test)
 
 }
-
 
 // same everywhere
 func TestServices(t *testing.T) {
@@ -221,7 +223,7 @@ func volumeCreate(
 func volumeByName(
 	t *testing.T, client types.Client, volumeName string) *types.Volume {
 	log.WithField("volumeName", volumeName).Info("get volume by ec2.Name")
-	vols, err := client.API().Volumes(nil, false)
+	vols, err := client.API().Volumes(nil, true)
 	assert.NoError(t, err)
 	if err != nil {
 		t.FailNow()
@@ -234,6 +236,25 @@ func volumeByName(
 	}
 	t.FailNow()
 	t.Error("failed volumeByName")
+	return nil
+}
+
+func volumeByID(
+	t *testing.T, client types.Client, volumeID string) *types.Volume {
+	log.WithField("volumeID", volumeID).Info("get volume by ec2.Name using ID")
+	vols, err := client.API().Volumes(nil, true)
+	assert.NoError(t, err)
+	if err != nil {
+		t.FailNow()
+	}
+	assert.Contains(t, vols, ec2.Name)
+	for _, vol := range vols[ec2.Name] {
+		if vol.ID == volumeID {
+			return vol
+		}
+	}
+	t.FailNow()
+	t.Error("failed volumeByID")
 	return nil
 }
 
@@ -271,7 +292,7 @@ func volumeAttach(
 func volumeInspect(
 	t *testing.T, client types.Client, volumeID string) *types.Volume {
 	log.WithField("volumeID", volumeID).Info("inspecting volume")
-	reply, err := client.API().VolumeInspect(nil, ec2.Name, volumeID, false)
+	reply, err := client.API().VolumeInspect(nil, ec2.Name, volumeID, true)
 	assert.NoError(t, err)
 
 	if err != nil {
