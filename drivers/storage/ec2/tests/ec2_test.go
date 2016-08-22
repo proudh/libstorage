@@ -63,7 +63,10 @@ func TestVolumes(t *testing.T) {
 
 	tf := func(config gofig.Config, client types.Client, t *testing.T) {
 		//vol := volumeInspect(t, client, "vol-d70b7b5e")
-		vol := volumeByName(t, client, "ph-ls-test-root")
+		vol := volumeDetach(t, client, "vol-972e721e")
+		//_ = volumeDetach(t, client, "vol-972e721e")
+		//vol := volumeInspectDetached(t, client, "vol-972e721e")
+
 		fmt.Println(vol.ID)
 		/*snapshotRemove(t, client, "snap-11839557")
 		vol1 := volumeCreateFromSnapshot(t, client, "snap-3df339c1", "ls-test-snap2-ph")

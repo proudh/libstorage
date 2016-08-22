@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
@@ -45,6 +46,7 @@ type driver struct {
 	ec2Instance      *awsec2.EC2
 	//	ec2Tag           string
 	awsCreds *credentials.Credentials
+	mutex    sync.Mutex
 }
 
 type instanceIdentityDocument struct {
@@ -502,7 +504,7 @@ func (d *driver) VolumeAttach(
 	}
 	if opts.Force {
 		if _, err := d.VolumeDetach(ctx, volumeID, nil); err != nil {
-			return nil, "", err
+			return nil, "", goof.WithError("Error detaching volume", err)
 		}
 	}
 
@@ -540,6 +542,9 @@ func (d *driver) VolumeDetach(
 	ctx types.Context,
 	volumeID string,
 	opts *types.VolumeDetachOpts) (*types.Volume, error) {
+	//TODO Lock
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
 	// check for errors:
 	// no volume ID inputted
 	if volumeID == "" {
@@ -866,6 +871,9 @@ func (d *driver) toTypesSnapshot(
 // Used in VolumeAttach
 func (d *driver) attachVolume(
 	ctx types.Context, volumeID, volumeName, deviceName string) error {
+	//TODO Lock
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
 	// sanity check # of volumes to attach
 	vol, err := d.getVolume(ctx, volumeID, volumeName)
 	if err != nil {
