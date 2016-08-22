@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -949,9 +950,9 @@ func (d *driver) GetNextAvailableDeviceName() (string, error) {
 		}
 	}
 
-	localDevices, err := getLocalDevices()
+	localDevices, err := d.getLocalDevices()
 	if err != nil {
-		return "", err
+		return "", goof.WithError("error getting local devices", err)
 	}
 
 	for _, localDevice := range localDevices {
@@ -959,6 +960,21 @@ func (d *driver) GetNextAvailableDeviceName() (string, error) {
 			d.nextDeviceInfo.Prefix +
 			`(` + d.nextDeviceInfo.Pattern + `)`)
 		res := re.FindStringSubmatch(localDevice)
+		if len(res) > 0 {
+			blockDeviceNames[res[1]] = true
+		}
+	}
+
+	ephemeralDevices, err := d.getEphemeralDevices()
+	if err != nil {
+		return "", goof.WithError("error getting ephemeral devices", err)
+	}
+
+	for _, ephemeralDevice := range ephemeralDevices {
+		re, _ := regexp.Compile(`^` +
+			d.nextDeviceInfo.Prefix +
+			`(` + d.nextDeviceInfo.Pattern + `)`)
+		res := re.FindStringSubmatch(ephemeralDevice)
 		if len(res) > 0 {
 			blockDeviceNames[res[1]] = true
 		}
@@ -977,7 +993,7 @@ func (d *driver) GetNextAvailableDeviceName() (string, error) {
 	return "", goof.New("No available device")
 }
 
-func getLocalDevices() (deviceNames []string, err error) {
+func (d *driver) getLocalDevices() (deviceNames []string, err error) {
 	file := "/proc/partitions"
 	contentBytes, err := ioutil.ReadFile(file)
 	if err != nil {
@@ -997,6 +1013,46 @@ func getLocalDevices() (deviceNames []string, err error) {
 	return deviceNames, nil
 }
 
+func (d *driver) getEphemeralDevices() (deviceNames []string, err error) {
+	// Get list of all block devices
+	res, err := http.Get("http://169.254.169.254/latest/meta-data/block-device-mapping/")
+	if err != nil {
+		return nil, goof.WithError("ec2 block device mapping lookup failed", err)
+	}
+	blockDeviceMappings, err := ioutil.ReadAll(res.Body)
+	res.Body.Close()
+	if err != nil {
+		return nil, goof.WithError("error reading ec2 block device mappings", err)
+	}
+
+	// Filter list of all block devices for ephemeral devices
+	re, _ := regexp.Compile(`ephemeral([0-9]|1[0-9]|2[0-3])$`)
+
+	scanner := bufio.NewScanner(strings.NewReader(string(blockDeviceMappings)))
+	scanner.Split(bufio.ScanWords)
+
+	var input string
+	for scanner.Scan() {
+		input = scanner.Text()
+		if re.MatchString(input) {
+			// Find device name for ephemeral device
+			res, err := http.Get("http://169.254.169.254/latest/meta-data/block-device-mapping/" + input)
+			if err != nil {
+				return nil, goof.WithError("ec2 block device mapping lookup failed", err)
+			}
+			deviceName, err := ioutil.ReadAll(res.Body)
+			res.Body.Close()
+			if err != nil {
+				return nil, goof.WithError("error reading ec2 block device mappings", err)
+			}
+
+			deviceNames = append(deviceNames, string(deviceName))
+		}
+	}
+
+	return deviceNames, nil
+}
+
 func (d *driver) GetVolumeMapping() ([]*types.VolumeDevice, error) {
 	blockDevices, err := d.getBlockDevices(d.instanceDocument.InstanceID)
 	if err != nil {
@@ -1008,11 +1064,10 @@ func (d *driver) GetVolumeMapping() ([]*types.VolumeDevice, error) {
 		sdBlockDevice := &types.VolumeDevice{
 			ProviderName: d.Name(),
 			InstanceID:   &types.InstanceID{ID: d.instanceDocument.InstanceID, Driver: ec2.Name},
-			//InstanceID:   d.instanceDocument.InstanceID,
-			Region:   d.instanceDocument.Region,
-			Name:     *blockDevice.DeviceName,
-			VolumeID: *((*blockDevice.Ebs).VolumeId),
-			Status:   *((*blockDevice.Ebs).Status),
+			Region:       d.instanceDocument.Region,
+			Name:         *blockDevice.DeviceName,
+			VolumeID:     *((*blockDevice.Ebs).VolumeId),
+			Status:       *((*blockDevice.Ebs).Status),
 		}
 		BlockDevices = append(BlockDevices, sdBlockDevice)
 	}
