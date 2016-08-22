@@ -85,7 +85,7 @@ func (d *driver) NextDevice(
 	localDevices, err := d.LocalDevices(
 		ctx, &types.LocalDevicesOpts{Opts: opts})
 	if err != nil {
-		return "", err
+		return "", goof.WithError("error getting local devices", err)
 	}
 	localDeviceMapping := localDevices.DeviceMap
 
@@ -94,6 +94,21 @@ func (d *driver) NextDevice(
 			d.nextDeviceInfo.Prefix +
 			`(` + d.nextDeviceInfo.Pattern + `)`)
 		res := re.FindStringSubmatch(localDevice)
+		if len(res) > 0 {
+			localDeviceNames[res[1]] = true
+		}
+	}
+
+	ephemeralDevices, err := d.getEphemeralDevices()
+	if err != nil {
+		return "", goof.WithError("error getting ephemeral devices", err)
+	}
+
+	for _, ephemeralDevice := range ephemeralDevices {
+		re, _ := regexp.Compile(`^` +
+			d.nextDeviceInfo.Prefix +
+			`(` + d.nextDeviceInfo.Pattern + `)`)
+		res := re.FindStringSubmatch(ephemeralDevice)
 		if len(res) > 0 {
 			localDeviceNames[res[1]] = true
 		}
@@ -145,51 +160,42 @@ func (d *driver) LocalDevices(
 	}, nil
 }
 
-/*
-// SubnetResolver defines interface that can resolve subnet from environment
-type SubnetResolver interface {
-	ResolveSubnet() (string, error)
-}
-
-// AwsVpcSubnetResolver is thin interface that resolves instance subnet from
-// ec2metadata service. This helper is used instead of bringing AWS SDK to
-// executor on purpose to keep executor dependencies minimal.
-type AwsVpcSubnetResolver struct {
-	ec2MetadataIPAddress string
-}
-
-// ResolveSubnet determines VPC subnet id on running AWS instance
-func (r *AwsVpcSubnetResolver) ResolveSubnet() (string, error) {
-	resp, err := http.Get(r.getURL("mac"))
+func (d *driver) getEphemeralDevices() (deviceNames []string, err error) {
+	// Get list of all block devices
+	res, err := http.Get("http://169.254.169.254/latest/meta-data/block-device-mapping/")
 	if err != nil {
-		return "", err
+		return nil, goof.WithError("ec2 block device mapping lookup failed", err)
 	}
-	mac, err := ioutil.ReadAll(resp.Body)
-	resp.Body.Close()
+	blockDeviceMappings, err := ioutil.ReadAll(res.Body)
+	res.Body.Close()
 	if err != nil {
-		return "", err
+		return nil, goof.WithError("error reading ec2 block device mappings", err)
 	}
 
-	resp, err = http.Get(r.getURL(fmt.Sprintf("network/interfaces/macs/%s/subnet-id", mac)))
-	if err != nil {
-		return "", err
-	}
-	subnetID, err := ioutil.ReadAll(resp.Body)
-	resp.Body.Close()
-	if err != nil {
-		return "", err
+	// Filter list of all block devices for ephemeral devices
+	re, _ := regexp.Compile(`ephemeral([0-9]|1[0-9]|2[0-3])$`)
+
+	scanner := bufio.NewScanner(strings.NewReader(string(blockDeviceMappings)))
+	scanner.Split(bufio.ScanWords)
+
+	var input string
+	for scanner.Scan() {
+		input = scanner.Text()
+		if re.MatchString(input) {
+			// Find device name for ephemeral device
+			res, err := http.Get("http://169.254.169.254/latest/meta-data/block-device-mapping/" + input)
+			if err != nil {
+				return nil, goof.WithError("ec2 block device mapping lookup failed", err)
+			}
+			deviceName, err := ioutil.ReadAll(res.Body)
+			res.Body.Close()
+			if err != nil {
+				return nil, goof.WithError("error reading ec2 block device mappings", err)
+			}
+
+			deviceNames = append(deviceNames, string(deviceName))
+		}
 	}
 
-	return string(subnetID), nil
+	return deviceNames, nil
 }
-
-func (r *AwsVpcSubnetResolver) getURL(path string) string {
-	return fmt.Sprintf("http://%s/latest/meta-data/%s", r.ec2MetadataIPAddress, path)
-}
-
-// NewAwsVpcSubnetResolver creates AwsVpcSubnetResolver for default AWS endpoint
-func NewAwsVpcSubnetResolver() *AwsVpcSubnetResolver {
-	return &AwsVpcSubnetResolver{
-		ec2MetadataIPAddress: "169.254.169.254",
-	}
-}*/
