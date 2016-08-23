@@ -30,15 +30,15 @@ import (
 )
 
 const (
-	//@enum WaitAction
+	// WaitVolumeCreate signifies to wait for volume creation to complete
 	WaitVolumeCreate = "create"
-	//@enum WaitAction
+	// WaitVolumeAttach signifies to wait for volume attachment to complete
 	WaitVolumeAttach = "attach"
-	//@enum WaitAction
+	// WaitVolumeDetach signifies to wait for volume detachment to complete
 	WaitVolumeDetach = "detach"
 
-	// Max number of retries for failed operations
-	defaultMaxRetries = 10
+	// DefaultMaxRetries is the max number of times to retry failed operations
+	DefaultMaxRetries = 10
 )
 
 type driver struct {
@@ -49,7 +49,7 @@ type driver struct {
 	// TODO rexrayTag
 	//	ec2Tag           string
 	awsCreds *credentials.Credentials
-	mutex    sync.Mutex
+	mutex    *sync.Mutex
 }
 
 type instanceIdentityDocument struct {
@@ -140,9 +140,10 @@ func (d *driver) Init(context types.Context, config gofig.Config) error {
 		})
 
 	awsConfig := aws.NewConfig().WithCredentials(d.awsCreds).WithRegion(region).WithEndpoint(endpoint).WithMaxRetries(maxRetries)
-	fmt.Printf("maxRetries: %d", maxRetries)
 
 	d.ec2Instance = awsec2.New(mySession, awsConfig)
+
+	d.mutex = &sync.Mutex{}
 
 	log.WithFields(fields).Info("storage driver initialized")
 
@@ -1304,13 +1305,13 @@ func (d *driver) maxRetries() int {
 	// set it to the default number of max retries.
 	if maxRetriesString := d.config.GetString("ec2.maxRetries"); maxRetriesString != "0" {
 		if maxRetries := d.config.GetInt("ec2.maxRetries"); maxRetries <= 0 {
-			return defaultMaxRetries
+			return DefaultMaxRetries
 		} else {
 			return maxRetries
 		}
-	} else {
-		return 0
 	}
+
+	return 0
 }
 
 // TODO rexrayTag
