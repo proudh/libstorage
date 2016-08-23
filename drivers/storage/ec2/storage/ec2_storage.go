@@ -256,6 +256,9 @@ func (d *driver) VolumeCreate(ctx types.Context, volumeName string,
 	if opts.IOPS != nil {
 		volume.IOPS = *opts.IOPS
 	}
+	if opts.Encrypted != nil {
+		volume.Encrypted = *opts.Encrypted
+	}
 
 	// pass in parameters to helper function to create the volume
 	vol, err := d.createVolume(ctx, volumeName, "", volume)
@@ -311,6 +314,16 @@ func (d *driver) VolumeCreateFromSnapshot(
 	}
 	if opts.IOPS != nil {
 		volume.IOPS = *opts.IOPS
+	}
+	if *opts.Encrypted == false {
+		snapshot, err := d.SnapshotInspect(ctx, snapshotID, nil)
+		if err != nil {
+			return &types.Volume{}, goof.WithError(
+				"Error getting snapshot", err)
+		}
+		volume.Encrypted = snapshot.Encrypted
+	} else {
+		volume.Encrypted = *opts.Encrypted
 	}
 
 	// pass in parameters to helper function to create the volume
@@ -388,7 +401,8 @@ func (d *driver) VolumeCopy(
 
 	// use temporary snapshot to create volume
 	vol, err = d.VolumeCreateFromSnapshot(ctx, snapshot.ID,
-		volumeName, &types.VolumeCreateOpts{Opts: opts})
+		volumeName, &types.VolumeCreateOpts{Encrypted: &snapshot.Encrypted,
+			Opts: opts})
 	if err != nil {
 		return &types.Volume{}, goof.WithError(
 			"error creating volume copy from snapshot", err)
@@ -794,6 +808,7 @@ func (d *driver) toTypesVolume(
 			Name:             name,
 			ID:               *volume.VolumeId,
 			AvailabilityZone: *volume.AvailabilityZone,
+			Encrypted:        *volume.Encrypted,
 			Status:           *volume.State,
 			Type:             *volume.VolumeType,
 			Size:             *volume.Size,
@@ -857,6 +872,7 @@ func (d *driver) toTypesSnapshot(
 			Name:        name,
 			VolumeID:    *snapshot.VolumeId,
 			ID:          *snapshot.SnapshotId,
+			Encrypted:   *snapshot.Encrypted,
 			VolumeSize:  *snapshot.VolumeSize,
 			StartTime:   (*snapshot.StartTime).Unix(),
 			Description: *snapshot.Description,
@@ -1101,6 +1117,7 @@ func (d *driver) createVolume(ctx types.Context, volumeName, snapshotID string,
 	options := &awsec2.CreateVolumeInput{
 		Size:             &vol.Size,
 		AvailabilityZone: &vol.AvailabilityZone,
+		Encrypted:        &vol.Encrypted,
 		VolumeType:       &vol.Type,
 	}
 	if snapshotID != "" {
@@ -1210,6 +1227,10 @@ UpdateLoop:
 
 func (d *driver) waitSnapshotComplete(
 	ctx types.Context, snapshotID string) error {
+	if snapshotID == "" {
+		return goof.New("Missing snapshot ID")
+	}
+
 	for {
 		snapshots, err := d.getSnapshot(ctx, "", snapshotID, "")
 		if err != nil {

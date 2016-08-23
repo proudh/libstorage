@@ -62,12 +62,17 @@ func TestVolumes(t *testing.T) {
 	}
 
 	tf := func(config gofig.Config, client types.Client, t *testing.T) {
+		//vol := volumeCreateEncrypted(t, client, "ls-enc-vol-ph")
+		//	_ = volumeAttach(t, client, "vol-3aeee7b3")
+		vol := volumeCopy(t, client, "vol-3aeee7b3", "ls-enc-copy-ph")
+		fmt.Println(vol.ID)
+		volumeRemove(t, client, vol.ID)
+		//snap := volumeSnapshot(t, client, "vol-3aeee7b3", "ls-enc-snap-ph")
+		//vol2 := volumeCreateFromSnapshot(t, client, snap.ID, "ls-enc-vol2-ph")
 		//vol := volumeInspect(t, client, "vol-d70b7b5e")
-		vol := volumeDetach(t, client, "vol-972e721e")
 		//_ = volumeDetach(t, client, "vol-972e721e")
 		//vol := volumeInspectDetached(t, client, "vol-972e721e")
 
-		fmt.Println(vol.ID)
 		/*snapshotRemove(t, client, "snap-11839557")
 		vol1 := volumeCreateFromSnapshot(t, client, "snap-3df339c1", "ls-test-snap2-ph")
 		_ = volumeCopy(t, client, "vol-8efba507", "ls-test-copy-ph")
@@ -219,6 +224,38 @@ func volumeCreate(
 
 	assert.Equal(t, volumeName, reply.Name)
 	assert.Equal(t, size, reply.Size)
+	return reply
+}
+
+func volumeCreateEncrypted(
+	t *testing.T, client types.Client, volumeName string) *types.Volume {
+	log.WithField("volumeName", volumeName).Info("creating encrypted volume")
+	size := int64(2)
+	encrypted := true
+
+	opts := map[string]interface{}{
+		"priority": 2,
+		"owner":    "root@example.com",
+	}
+
+	volumeCreateRequest := &types.VolumeCreateRequest{
+		Name:      volumeName,
+		Size:      &size,
+		Encrypted: &encrypted,
+		Opts:      opts,
+	}
+
+	reply, err := client.API().VolumeCreate(nil, ec2.Name, volumeCreateRequest)
+	assert.NoError(t, err)
+	if err != nil {
+		t.FailNow()
+		t.Error("failed volumeCreate")
+	}
+	apitests.LogAsJSON(reply, t)
+
+	assert.Equal(t, volumeName, reply.Name)
+	assert.Equal(t, size, reply.Size)
+	assert.Equal(t, encrypted, reply.Encrypted)
 	return reply
 }
 
