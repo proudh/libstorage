@@ -89,7 +89,7 @@ func (d *driver) NextDevice(
 	}
 	localDeviceMapping := localDevices.DeviceMap
 
-	for localDevice, _ := range localDeviceMapping {
+	for localDevice := range localDeviceMapping {
 		re, _ := regexp.Compile(`^/dev/` +
 			d.nextDeviceInfo.Prefix +
 			`(` + d.nextDeviceInfo.Pattern + `)`)
