@@ -35,6 +35,10 @@ const (
                     "type": "string",
                     "description": "The zone for which the volume is available."
                 },
+                "encrypted": {
+                    "type": "boolean",
+                    "description": "A flag indicating whether or not the volume is encrypted."
+                },
                 "iops": {
                     "type": "number",
                     "description": "The volume IOPs."
@@ -115,7 +119,7 @@ const (
 
 
         "instance": {
-            "title": "Instnace",
+            "title": "Instance",
             "description": "Instance is additional information about a host, generated using the InstanceID.",
             "type": "object",
             "properties": {
@@ -156,6 +160,10 @@ const (
                     "type": "string",
                     "description": "A description of the snapshot."
                 },
+                "encrypted": {
+                    "type": "boolean",
+                    "description": "A flag indicating whether or not the snapshot is encrypted."
+		},
                 "startTime": {
                     "type": "number",
                     "description": "The time (epoch) at which the request to create the snapshot was submitted."
@@ -418,6 +426,9 @@ const (
                 },
                 "availabilityZone": {
                     "type": "string"
+                },
+                "encrypted": {
+                    "type": "boolean"
                 },
                 "iops": {
                     "type": "number"
