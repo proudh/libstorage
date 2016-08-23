@@ -36,15 +36,17 @@ const (
 	WaitVolumeAttach = "attach"
 	//@enum WaitAction
 	WaitVolumeDetach = "detach"
+
+	// Max number of retries for failed operations
+	defaultMaxRetries = 10
 )
 
-// Config, client, and whatever else you need to connect to the provider
-// Client varies with provider SDK
 type driver struct {
 	config           gofig.Config
 	nextDeviceInfo   *types.NextDeviceInfo
 	instanceDocument *instanceIdentityDocument
 	ec2Instance      *awsec2.EC2
+	// TODO rexrayTag
 	//	ec2Tag           string
 	awsCreds *credentials.Credentials
 	mutex    sync.Mutex
@@ -86,8 +88,7 @@ func (d *driver) Init(context types.Context, config gofig.Config) error {
 	// Initialize with config content
 	fields := map[string]interface{}{
 		"moduleName": d.Name(),
-		//		"accessKey":  os.Getenv("AWS_ACCESS_KEY_ID"),
-		"accessKey": d.accessKey(),
+		"accessKey":  d.accessKey(),
 	}
 
 	log.WithFields(fields).Debug("starting provider driver")
@@ -121,6 +122,9 @@ func (d *driver) Init(context types.Context, config gofig.Config) error {
 		endpoint = fmt.Sprintf("ec2.%s.amazonaws.com", region)
 	}
 
+	maxRetries := d.maxRetries()
+
+	// TODO rexrayTag
 	//	d.ec2Tag = d.rexrayTag()
 
 	mySession := session.New()
@@ -135,7 +139,8 @@ func (d *driver) Init(context types.Context, config gofig.Config) error {
 			},
 		})
 
-	awsConfig := aws.NewConfig().WithCredentials(d.awsCreds).WithRegion(region).WithEndpoint(endpoint)
+	awsConfig := aws.NewConfig().WithCredentials(d.awsCreds).WithRegion(region).WithEndpoint(endpoint).WithMaxRetries(maxRetries)
+	fmt.Printf("maxRetries: %d", maxRetries)
 
 	d.ec2Instance = awsec2.New(mySession, awsConfig)
 
@@ -557,9 +562,9 @@ func (d *driver) VolumeDetach(
 	ctx types.Context,
 	volumeID string,
 	opts *types.VolumeDetachOpts) (*types.Volume, error) {
-	//TODO Lock
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
+
 	// check for errors:
 	// no volume ID inputted
 	if volumeID == "" {
@@ -759,6 +764,7 @@ func (d *driver) getVolume(
 			Name: aws.String("volume-id"), Values: []*string{&volumeID}})
 	}
 
+	// TODO rexrayTag
 	/*	if d.ec2Tag != "" {
 			filters = append(filters, &awsec2.Filter{
 				Name:   aws.String(fmt.Sprintf("tag:%s", d.rexrayTag())),
@@ -843,6 +849,7 @@ func (d *driver) getSnapshot(
 			Name: aws.String("snapshot-id"), Values: []*string{&snapshotID}})
 	}
 
+	// TODO rexrayTag?
 	/*	if d.ec2Tag != "" {
 		filters = append(filters, &ec2.Filter{
 			Name:   aws.String(fmt.Sprintf("tag:%s", rexrayTag)),
@@ -888,9 +895,9 @@ func (d *driver) toTypesSnapshot(
 // Used in VolumeAttach
 func (d *driver) attachVolume(
 	ctx types.Context, volumeID, volumeName, deviceName string) error {
-	//TODO Lock
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
+
 	// sanity check # of volumes to attach
 	vol, err := d.getVolume(ctx, volumeID, volumeName)
 	if err != nil {
@@ -1174,6 +1181,7 @@ func (d *driver) createTags(id, name string) (err error) {
 			Value: &name,
 		})
 
+	// TODO rexrayTag
 	/*	if d.ec2Tag != "" {
 			initCTInput()
 			ctInput.Tags = append(
@@ -1291,6 +1299,21 @@ func (d *driver) endpoint() string {
 	return d.config.GetString("ec2.endpoint")
 }
 
+func (d *driver) maxRetries() int {
+	// if maxRetries in config is non-numeric or a negative number,
+	// set it to the default number of max retries.
+	if maxRetriesString := d.config.GetString("ec2.maxRetries"); maxRetriesString != "0" {
+		if maxRetries := d.config.GetInt("ec2.maxRetries"); maxRetries <= 0 {
+			return defaultMaxRetries
+		} else {
+			return maxRetries
+		}
+	} else {
+		return 0
+	}
+}
+
+// TODO rexrayTag
 /*func (d *driver) rexrayTag() string {
 	return d.config.GetString("ec2.rexrayTag")
 }*/

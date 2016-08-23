@@ -1,7 +1,7 @@
 package ec2
 
 import (
-	"fmt"
+	//"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -11,24 +11,24 @@ import (
 	"github.com/akutz/gofig"
 	"github.com/stretchr/testify/assert"
 
-	//	"github.com/emccode/libstorage/api/context"
-	//	"github.com/emccode/libstorage/api/registry"
+	//"github.com/emccode/libstorage/api/context"
+	//"github.com/emccode/libstorage/api/registry"
 	"github.com/emccode/libstorage/api/server"
 	apitests "github.com/emccode/libstorage/api/tests"
 	"github.com/emccode/libstorage/api/types"
-	//	"github.com/emccode/libstorage/api/utils"
+	//"github.com/emccode/libstorage/api/utils"
 	"github.com/emccode/libstorage/drivers/storage/ec2"
-	//	ec2x "github.com/emccode/libstorage/drivers/storage/ec2/executor"
+	//ec2x "github.com/emccode/libstorage/drivers/storage/ec2/executor"
 )
 
 // Put contents of sample config.yml here
 var (
-	configYAML = []byte(``)
-	/*	configYAML = []byte(`
-		ec2:
-		  region: us-west-2
-		  endpoint: ec2.us-west-2.amazonaws.com`)
-	*/)
+	//	configYAML = []byte(``)
+	configYAML = []byte(`
+ec2:
+  region: us-west-2
+  endpoint: ec2.us-west-2.amazonaws.com`)
+)
 
 var volumeName string
 var volumeName2 string
@@ -56,6 +56,7 @@ func TestMain(m *testing.M) {
 	os.Exit(ec)
 }
 
+/*
 func TestVolumes(t *testing.T) {
 	if skipTests() {
 		t.SkipNow()
@@ -73,7 +74,7 @@ func TestVolumes(t *testing.T) {
 		//_ = volumeDetach(t, client, "vol-972e721e")
 		//vol := volumeInspectDetached(t, client, "vol-972e721e")
 
-		/*snapshotRemove(t, client, "snap-11839557")
+		snapshotRemove(t, client, "snap-11839557")
 		vol1 := volumeCreateFromSnapshot(t, client, "snap-3df339c1", "ls-test-snap2-ph")
 		_ = volumeCopy(t, client, "vol-8efba507", "ls-test-copy-ph")
 		vol1 := volumeCreate(t, client, "ls-test-vol-ph")
@@ -83,11 +84,11 @@ func TestVolumes(t *testing.T) {
 		_ = snapshotInspect(t, client, snapCopy.ID)
 		_ = volumeCreate(t, client, volumeName)
 		vol1 := volumeByName(t, client, volumeName)
-		volumeRemove(t, client, vol1.ID)*/
+		volumeRemove(t, client, vol1.ID)
 	}
 	apitests.Run(t, ec2.Name, configYAML, tf)
 }
-
+*/
 /*
 // Isilon and ScaleIO just check result of InstanceID();
 // VBox and EFS fill in InstanceID completely then check it
@@ -100,10 +101,9 @@ func TestInstanceID(t *testing.T) {
 
 	// initialize storage driver
 	ctx := context.Background()
-	if err := sd.Init(ctx, gofig.New()); err != nil {
-		t.Fatal(err)
-	}
-
+		if err := sd.Init(ctx, gofig.New()); err != nil {
+			t.Fatal(err)
+		}
 	// Get Instance ID
 	iid, err := ec2x.InstanceID()
 	assert.NoError(t, err)
@@ -130,6 +130,7 @@ func TestInstanceID(t *testing.T) {
 		}).Test)
 
 }
+*/
 
 // same everywhere
 func TestServices(t *testing.T) {
@@ -148,6 +149,7 @@ func TestServices(t *testing.T) {
 	apitests.Run(t, ec2.Name, configYAML, tf)
 }
 
+/*
 // same everywhere but use apitests.RunGroup
 func TestVolumeAttach(t *testing.T) {
 	if skipTests() {
