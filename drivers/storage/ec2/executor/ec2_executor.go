@@ -127,31 +127,30 @@ func (d *driver) NextDevice(
 func (d *driver) LocalDevices(
 	ctx types.Context,
 	opts *types.LocalDevicesOpts) (*types.LocalDevices, error) {
-
 	out, err := exec.Command(
-		"df", "--output=source,target").Output()
+		"lsblk", "--pairs", "--noheadings", "--output=name,mountpoint").Output()
 	if err != nil {
-		return nil, goof.WithError("error running df", err)
+		return nil, goof.WithError("error running lsblk", err)
 	}
 
 	input := string(out)
 
-	re, _ := regexp.Compile(`^/dev/xvd([a-z])`)
+	// populate map parsing output from lsblk
 	localDevices := make(map[string]string)
-
 	scanner := bufio.NewScanner(strings.NewReader(input))
-	// Set the split function for the scanning operation.
 	scanner.Split(bufio.ScanWords)
 
-	var prev string
-	matched := false
+	count := 0
+	var name string
 	for scanner.Scan() {
-		temp := scanner.Text()
-		if matched {
-			localDevices[prev] = temp
+		if count%2 == 0 {
+			// get volume name
+			name = "/dev/" + scanner.Text()[6:len(scanner.Text())-1]
+		} else {
+			// set mountpoint corresponding to volume name
+			localDevices[name] = scanner.Text()[12 : len(scanner.Text())-1]
 		}
-		matched = re.MatchString(temp)
-		prev = temp
+		count++
 	}
 
 	return &types.LocalDevices{

@@ -1304,11 +1304,11 @@ func (d *driver) maxRetries() int {
 	// if maxRetries in config is non-numeric or a negative number,
 	// set it to the default number of max retries.
 	if maxRetriesString := d.config.GetString("ec2.maxRetries"); maxRetriesString != "0" {
-		if maxRetries := d.config.GetInt("ec2.maxRetries"); maxRetries <= 0 {
+		maxRetries := d.config.GetInt("ec2.maxRetries")
+		if maxRetries <= 0 {
 			return DefaultMaxRetries
-		} else {
-			return maxRetries
 		}
+		return maxRetries
 	}
 
 	return 0
