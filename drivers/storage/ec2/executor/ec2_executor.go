@@ -2,15 +2,17 @@ package executor
 
 import (
 	"bufio"
+	"fmt"
 	"io/ioutil"
 	"net/http"
-	"os/exec"
+	//"os/exec"
 	"regexp"
 	"strings"
 
 	"github.com/akutz/gofig"
 	"github.com/akutz/goof"
 
+	"github.com/emccode/libstorage/api/context"
 	"github.com/emccode/libstorage/api/registry"
 	"github.com/emccode/libstorage/api/types"
 	"github.com/emccode/libstorage/drivers/storage/ec2"
@@ -127,7 +129,13 @@ func (d *driver) NextDevice(
 func (d *driver) LocalDevices(
 	ctx types.Context,
 	opts *types.LocalDevicesOpts) (*types.LocalDevices, error) {
-	out, err := exec.Command(
+	fmt.Printf("From LocalDevices: %#v\n", ctx)
+	localDevices, ok := ctx.Value(context.LocalDevicesKey).(map[string]string)
+	if !ok {
+		return nil, goof.New("error getting local devices from context")
+	}
+
+	/*out, err := exec.Command(
 		"lsblk", "--pairs", "--noheadings", "--output=name,mountpoint").Output()
 	if err != nil {
 		return nil, goof.WithError("error running lsblk", err)
@@ -151,7 +159,7 @@ func (d *driver) LocalDevices(
 			localDevices[name] = scanner.Text()[12 : len(scanner.Text())-1]
 		}
 		count++
-	}
+	}*/
 
 	return &types.LocalDevices{
 		Driver:    ec2.Name,
