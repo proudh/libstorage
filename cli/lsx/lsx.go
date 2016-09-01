@@ -111,12 +111,24 @@ func Run() {
 				os.Exit(1)
 			}
 
+			// Get current instance id
+			iid, iidErr := d.InstanceID(ctx, store)
+			if iidErr != nil {
+				fmt.Fprintf(os.Stderr, "error getting instance id: %v\n", iidErr)
+				os.Exit(1)
+			}
+			// Unmarshal instance id
+			var iidStr string
+			if err := iid.UnmarshalMetadata(&iidStr); err != nil {
+				fmt.Fprintf(os.Stderr, "error unmarshalling instance id metadata: %v\n", err)
+				os.Exit(1)
+			}
 			// Parse these vols and store vol-ids/device names in ctx
 			ctx.Debug("parsing volume info for local devices map")
 			lds := make(map[string]string)
 			for _, volume := range vols {
 				for _, attachment := range volume.Attachments {
-					if attachment.InstanceID.ID == "i-84e5772b" && attachment.DeviceName != "" &&
+					if strings.EqualFold(attachment.InstanceID.ID, iidStr) && attachment.DeviceName != "" &&
 						attachment.VolumeID != "" {
 						ctx.Debug("found device")
 						deviceName := strings.Replace(
@@ -164,12 +176,24 @@ func Run() {
 					os.Exit(1)
 				}
 
+				// Get current instance id
+				iid, iidErr := d.InstanceID(ctx, store)
+				if iidErr != nil {
+					fmt.Fprintf(os.Stderr, "error getting instance id: %v\n", iidErr)
+					os.Exit(1)
+				}
+				// Unmarshal instance id
+				var iidStr string
+				if err := iid.UnmarshalMetadata(&iidStr); err != nil {
+					fmt.Fprintf(os.Stderr, "error unmarshalling instance id metadata: %v\n", err)
+					os.Exit(1)
+				}
 				// Parse these vols and store vol-ids/device names in ctx
 				ctx.Debug("parsing volume info for local devices map")
 				lds := make(map[string]string)
 				for _, volume := range vols {
 					for _, attachment := range volume.Attachments {
-						if attachment.InstanceID.ID == "i-84e5772b" && attachment.DeviceName != "" &&
+						if strings.EqualFold(attachment.InstanceID.ID, iidStr) && attachment.DeviceName != "" &&
 							attachment.VolumeID != "" {
 							ctx.Debug("found device")
 							deviceName := strings.Replace(
@@ -187,7 +211,7 @@ func Run() {
 				return false, nil, err
 			}
 			for k := range ldm.DeviceMap {
-				if strings.ToLower(k) == opts.Token {
+				if strings.EqualFold(k, opts.Token) {
 					return true, ldm, nil
 				}
 			}
