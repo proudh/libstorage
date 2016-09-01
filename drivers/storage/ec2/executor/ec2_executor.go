@@ -2,7 +2,7 @@ package executor
 
 import (
 	"bufio"
-	"fmt"
+	//"fmt"
 	"io/ioutil"
 	"net/http"
 	//"os/exec"
@@ -129,8 +129,10 @@ func (d *driver) NextDevice(
 func (d *driver) LocalDevices(
 	ctx types.Context,
 	opts *types.LocalDevicesOpts) (*types.LocalDevices, error) {
+	/*localDevices := make(map[string]string)
+	localDevices["shark"] = "laser"
 	fmt.Printf("From LocalDevices: %#v\n", ctx)
-	localDevices, ok := ctx.Value(context.LocalDevicesKey).(map[string]string)
+	*/localDevices, ok := ctx.Value(context.LocalDevicesKey).(map[string]string)
 	if !ok {
 		return nil, goof.New("error getting local devices from context")
 	}
