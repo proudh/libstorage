@@ -17,7 +17,6 @@ import (
 	"github.com/emccode/libstorage/api/utils"
 	apiconfig "github.com/emccode/libstorage/api/utils/config"
 
-	_ "github.com/emccode/libstorage/drivers/storage/ec2/storage"
 	_ "github.com/emccode/libstorage/imports/config"
 	_ "github.com/emccode/libstorage/imports/executors"
 )
@@ -42,11 +41,6 @@ func Run() {
 	}
 
 	driverName := strings.ToLower(d.Name())
-	sd, err := registry.NewStorageDriver(args[1])
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error starting storage driver: %v\n", err)
-		os.Exit(1)
-	}
 
 	config, err := apiconfig.NewConfig()
 	if err != nil {
@@ -59,10 +53,6 @@ func Run() {
 
 	if err := d.Init(ctx, config); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
-	}
-	if err := sd.Init(ctx, config); err != nil {
-		fmt.Fprintf(os.Stderr, "error initializing storage driver: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -101,46 +91,6 @@ func Run() {
 			printUsageAndExit()
 		}
 		op = "local devices"
-		if strings.EqualFold(driverName, "ec2") {
-			vols, err := sd.Volumes(ctx, &apitypes.VolumesOpts{Attachments: true})
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "error getting volumes in API.Volumes call: %v\n", err)
-				os.Exit(1)
-			} else if vols == nil {
-				fmt.Fprintln(os.Stderr, "vols is nil")
-				os.Exit(1)
-			}
-
-			// Get current instance id
-			iid, iidErr := d.InstanceID(ctx, store)
-			if iidErr != nil {
-				fmt.Fprintf(os.Stderr, "error getting instance id: %v\n", iidErr)
-				os.Exit(1)
-			}
-			// Unmarshal instance id
-			var iidStr string
-			if err := iid.UnmarshalMetadata(&iidStr); err != nil {
-				fmt.Fprintf(os.Stderr, "error unmarshalling instance id metadata: %v\n", err)
-				os.Exit(1)
-			}
-			// Parse these vols and store vol-ids/device names in ctx
-			ctx.Debug("parsing volume info for local devices map")
-			lds := make(map[string]string)
-			for _, volume := range vols {
-				for _, attachment := range volume.Attachments {
-					if strings.EqualFold(attachment.InstanceID.ID, iidStr) && attachment.DeviceName != "" &&
-						attachment.VolumeID != "" {
-						ctx.Debug("found device")
-						deviceName := strings.Replace(
-							attachment.DeviceName,
-							"/dev/s", "/dev/xv", -1)
-						lds[attachment.VolumeID] = deviceName
-					}
-				}
-			}
-			ctx.Debug("finished creating local devices map")
-			ctx = ctx.WithValue(context.LocalDevicesKey, lds)
-		}
 		opResult, opErr := d.LocalDevices(ctx, &apitypes.LocalDevicesOpts{
 			ScanType: apitypes.ParseDeviceScanType(args[3]),
 			Opts:     store,
@@ -166,52 +116,12 @@ func Run() {
 		}
 
 		ldl := func() (bool, *apitypes.LocalDevices, error) {
-			if strings.EqualFold(driverName, "ec2") {
-				vols, err := sd.Volumes(ctx, &apitypes.VolumesOpts{Attachments: true})
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "error getting volumes in API.Volumes call: %v\n", err)
-					os.Exit(1)
-				} else if vols == nil {
-					fmt.Fprintln(os.Stderr, "vols is nil")
-					os.Exit(1)
-				}
-
-				// Get current instance id
-				iid, iidErr := d.InstanceID(ctx, store)
-				if iidErr != nil {
-					fmt.Fprintf(os.Stderr, "error getting instance id: %v\n", iidErr)
-					os.Exit(1)
-				}
-				// Unmarshal instance id
-				var iidStr string
-				if err := iid.UnmarshalMetadata(&iidStr); err != nil {
-					fmt.Fprintf(os.Stderr, "error unmarshalling instance id metadata: %v\n", err)
-					os.Exit(1)
-				}
-				// Parse these vols and store vol-ids/device names in ctx
-				ctx.Debug("parsing volume info for local devices map")
-				lds := make(map[string]string)
-				for _, volume := range vols {
-					for _, attachment := range volume.Attachments {
-						if strings.EqualFold(attachment.InstanceID.ID, iidStr) && attachment.DeviceName != "" &&
-							attachment.VolumeID != "" {
-							ctx.Debug("found device")
-							deviceName := strings.Replace(
-								attachment.DeviceName,
-								"/dev/s", "/dev/xv", -1)
-							lds[attachment.VolumeID] = deviceName
-						}
-					}
-				}
-				ctx.Debug("finished creating local devices map")
-				ctx = ctx.WithValue(context.LocalDevicesKey, lds)
-			}
 			ldm, err := d.LocalDevices(ctx, &opts.LocalDevicesOpts)
 			if err != nil {
 				return false, nil, err
 			}
 			for k := range ldm.DeviceMap {
-				if strings.EqualFold(k, opts.Token) {
+				if strings.ToLower(k) == opts.Token {
 					return true, ldm, nil
 				}
 			}

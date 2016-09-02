@@ -1,7 +1,7 @@
 package ec2
 
 import (
-	//"fmt"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -28,6 +28,12 @@ var (
 ec2:
   region: us-west-2
   endpoint: ec2.us-west-2.amazonaws.com`)
+	// TODO mimic EFS tag
+/*	configYAML = []byte(`
+ec2:
+  region: us-west-2
+  tag: RR
+  endpoint: ec2.us-west-2.amazonaws.com`)*/
 )
 
 var volumeName string
@@ -56,7 +62,6 @@ func TestMain(m *testing.M) {
 	os.Exit(ec)
 }
 
-/*
 func TestVolumes(t *testing.T) {
 	if skipTests() {
 		t.SkipNow()
@@ -64,34 +69,41 @@ func TestVolumes(t *testing.T) {
 
 	tf := func(config gofig.Config, client types.Client, t *testing.T) {
 		//vol := volumeCreateEncrypted(t, client, "ls-enc-vol-ph")
-		//	_ = volumeAttach(t, client, "vol-3aeee7b3")
-		vol := volumeCopy(t, client, "vol-3aeee7b3", "ls-enc-copy-ph")
-		fmt.Println(vol.ID)
-		volumeRemove(t, client, vol.ID)
+		// TODO mimic EFS tag
+		//volumeRemove(t, client, "RR/ls-test-vol2-ph")
+		//vol := volumeCreate(t, client, "ls-test-vol3-ph", config.GetString("tag"))
+		//vol := volumeCreate(t, client, "rr-test-vol-ph")
+		vol := volumeByName(t, client, "rr-test-vol2-ph")
+		_ = volumeInspect(t, client, vol.ID)
+		_ = volumeInspectDetached(t, client, vol.ID)
+		_ = volumeByID(t, client, vol.ID)
+		fmt.Printf("vol.Name: %s", vol.Name)
 		//snap := volumeSnapshot(t, client, "vol-3aeee7b3", "ls-enc-snap-ph")
 		//vol2 := volumeCreateFromSnapshot(t, client, snap.ID, "ls-enc-vol2-ph")
 		//vol := volumeInspect(t, client, "vol-d70b7b5e")
-		//_ = volumeDetach(t, client, "vol-972e721e")
 		//vol := volumeInspectDetached(t, client, "vol-972e721e")
-
-		snapshotRemove(t, client, "snap-11839557")
-		vol1 := volumeCreateFromSnapshot(t, client, "snap-3df339c1", "ls-test-snap2-ph")
-		_ = volumeCopy(t, client, "vol-8efba507", "ls-test-copy-ph")
-		vol1 := volumeCreate(t, client, "ls-test-vol-ph")
-		origSnap := volumeSnapshot(t, client, vol1.ID, "ls-test-snap2-ph")
-		_ = snapshotCopy(t, client, "snap-3df339c1", "ls-test-snap2-ph", "")
-		snapCopy := snapshotByName(t, client, "Copy of ls-test-snap2-ph")
-		_ = snapshotInspect(t, client, snapCopy.ID)
-		_ = volumeCreate(t, client, volumeName)
-		vol1 := volumeByName(t, client, volumeName)
-		volumeRemove(t, client, vol1.ID)
+		/*
+			snapshotRemove(t, client, "snap-11839557")
+			vol1 := volumeCreateFromSnapshot(t, client, "snap-3df339c1", "ls-test-snap2-ph")
+			_ = volumeCopy(t, client, "vol-8efba507", "ls-test-copy-ph")
+			vol1 := volumeCreate(t, client, "ls-test-vol-ph")
+			origSnap := volumeSnapshot(t, client, vol1.ID, "ls-test-snap2-ph")
+			_ = snapshotCopy(t, client, "snap-3df339c1", "ls-test-snap2-ph", "")
+			snapCopy := snapshotByName(t, client, "Copy of ls-test-snap2-ph")
+			_ = snapshotInspect(t, client, snapCopy.ID)
+			_ = volumeCreate(t, client, volumeName)
+			vol1 := volumeByName(t, client, volumeName)
+			volumeRemove(t, client, vol1.ID)*/
 	}
 	apitests.Run(t, ec2.Name, configYAML, tf)
 }
-*/
+
+///////////////////////////////////////////////////////////////////////
+/////////                    PUBLIC TESTS                     /////////
+///////////////////////////////////////////////////////////////////////
 /*
-// Isilon and ScaleIO just check result of InstanceID();
-// VBox and EFS fill in InstanceID completely then check it
+// Check if InstanceID metadata is properly returned by executor
+// and InstanceID.ID is filled out by InstanceInspect
 func TestInstanceID(t *testing.T) {
 	// create storage driver
 	sd, err := registry.NewStorageDriver(ec2.Name)
@@ -101,10 +113,10 @@ func TestInstanceID(t *testing.T) {
 
 	// initialize storage driver
 	ctx := context.Background()
-		if err := sd.Init(ctx, gofig.New()); err != nil {
-			t.Fatal(err)
-		}
-	// Get Instance ID
+	if err := sd.Init(ctx, gofig.New()); err != nil {
+		t.Fatal(err)
+	}
+	// Get Instance ID metadata from executor
 	iid, err := ec2x.InstanceID()
 	assert.NoError(t, err)
 	if err != nil {
@@ -119,7 +131,6 @@ func TestInstanceID(t *testing.T) {
 	}
 
 	iid = i.InstanceID
-	fmt.Println(iid)
 
 	// test resulting InstanceID
 	apitests.Run(
@@ -130,9 +141,8 @@ func TestInstanceID(t *testing.T) {
 		}).Test)
 
 }
-*/
 
-// same everywhere
+// Test if Services are configured and returned properly from the client
 func TestServices(t *testing.T) {
 	if skipTests() {
 		t.SkipNow()
@@ -149,8 +159,7 @@ func TestServices(t *testing.T) {
 	apitests.Run(t, ec2.Name, configYAML, tf)
 }
 
-/*
-// same everywhere but use apitests.RunGroup
+// Test volume functionality from storage driver
 func TestVolumeAttach(t *testing.T) {
 	if skipTests() {
 		t.SkipNow()
@@ -160,6 +169,7 @@ func TestVolumeAttach(t *testing.T) {
 		vol = volumeCreate(t, client, volumeName)
 		_ = volumeAttach(t, client, vol.ID)
 		_ = volumeInspectAttached(t, client, vol.ID)
+		_ = volumeInspectDetachedFail(t, client, vol.ID)
 		_ = volumeDetach(t, client, vol.ID)
 		_ = volumeInspectDetached(t, client, vol.ID)
 		volumeRemove(t, client, vol.ID)
@@ -167,7 +177,7 @@ func TestVolumeAttach(t *testing.T) {
 	apitests.Run(t, ec2.Name, configYAML, tf)
 }
 
-// same everywhere
+// Test volume functionality from storage driver
 func TestVolumeCreateRemove(t *testing.T) {
 	if skipTests() {
 		t.SkipNow()
@@ -180,7 +190,7 @@ func TestVolumeCreateRemove(t *testing.T) {
 	apitests.Run(t, ec2.Name, configYAML, tf)
 }
 
-// same everywhere
+// Test volume functionality from storage driver
 func TestVolumes(t *testing.T) {
 	if skipTests() {
 		t.SkipNow()
@@ -199,11 +209,15 @@ func TestVolumes(t *testing.T) {
 	apitests.Run(t, ec2.Name, configYAML, tf)
 }*/
 
-//same everywhere
+///////////////////////////////////////////////////////////////////////
+/////////        PRIVATE TESTS FOR VOLUME FUNCTIONALITY       /////////
+///////////////////////////////////////////////////////////////////////
+// Test volume creation specifying size and volume name
 func volumeCreate(
 	t *testing.T, client types.Client, volumeName string) *types.Volume {
 	log.WithField("volumeName", volumeName).Info("creating volume")
-	size := int64(8)
+	// Prepare request for storage driver call to create volume
+	size := int64(1)
 
 	opts := map[string]interface{}{
 		"priority": 2,
@@ -216,6 +230,7 @@ func volumeCreate(
 		Opts: opts,
 	}
 
+	// Send request and retrieve created libStorage types.Volume
 	reply, err := client.API().VolumeCreate(nil, ec2.Name, volumeCreateRequest)
 	assert.NoError(t, err)
 	if err != nil {
@@ -224,14 +239,22 @@ func volumeCreate(
 	}
 	apitests.LogAsJSON(reply, t)
 
+	/* TODO mimic EFS tag
+	// If tag is set, then add tag to expected volumeName
+	if tag != "" {
+		volumeName = tag + "/" + volumeName
+	}*/
+	// Check if name and size are same
 	assert.Equal(t, volumeName, reply.Name)
 	assert.Equal(t, size, reply.Size)
 	return reply
 }
 
+// Test volume creation specifying size, volume name, and encryption
 func volumeCreateEncrypted(
 	t *testing.T, client types.Client, volumeName string) *types.Volume {
 	log.WithField("volumeName", volumeName).Info("creating encrypted volume")
+	// Prepare request for storage driver call to create volume
 	size := int64(2)
 	encrypted := true
 
@@ -247,6 +270,7 @@ func volumeCreateEncrypted(
 		Opts:      opts,
 	}
 
+	// Send request and retrieve created libStorage types.Volume
 	reply, err := client.API().VolumeCreate(nil, ec2.Name, volumeCreateRequest)
 	assert.NoError(t, err)
 	if err != nil {
@@ -255,51 +279,66 @@ func volumeCreateEncrypted(
 	}
 	apitests.LogAsJSON(reply, t)
 
+	// Check if name and size are same, and volume is encrypted
 	assert.Equal(t, volumeName, reply.Name)
 	assert.Equal(t, size, reply.Size)
 	assert.Equal(t, encrypted, reply.Encrypted)
 	return reply
 }
 
-// same everywhere
+// Test volume retrieval by volume name using Volumes, which retrieves all volumes
+// from the storage driver without filtering, and filters the volumes externally.
 func volumeByName(
 	t *testing.T, client types.Client, volumeName string) *types.Volume {
 	log.WithField("volumeName", volumeName).Info("get volume by ec2.Name")
-	vols, err := client.API().Volumes(nil, true)
+	// Retrieve all volumes
+	vols, err := client.API().Volumes(nil, false)
 	assert.NoError(t, err)
 	if err != nil {
 		t.FailNow()
 	}
+	// Filter volumes to those under the ec2 service,
+	// and find a volume matching inputted volume name
 	assert.Contains(t, vols, ec2.Name)
 	for _, vol := range vols[ec2.Name] {
 		if vol.Name == volumeName {
 			return vol
 		}
 	}
+	// No matching volumes found
 	t.FailNow()
 	t.Error("failed volumeByName")
 	return nil
 }
 
+// Test volume retrieval by volume ID using Volumes, which retrieves all
+// volumes from the storage driver without filtering, and filters the volumes
+// externally. Contrast with volumeInspect, which directly retrieves matching
+// volumes from the storage driver.
 func volumeByID(
 	t *testing.T, client types.Client, volumeID string) *types.Volume {
 	log.WithField("volumeID", volumeID).Info("get volume by ec2.Name using ID")
-	vols, err := client.API().Volumes(nil, true)
+	// Retrieve all volumes
+	vols, err := client.API().Volumes(nil, false)
 	assert.NoError(t, err)
 	if err != nil {
 		t.FailNow()
 	}
+	// Filter volumes to those under the ec2 service,
+	// and find a volume matching inputted volume ID
 	assert.Contains(t, vols, ec2.Name)
 	for _, vol := range vols[ec2.Name] {
 		if vol.ID == volumeID {
 			return vol
 		}
 	}
+	// No matching volumes found
 	t.FailNow()
 	t.Error("failed volumeByID")
 	return nil
 }
 
+// Test volume removal by volume ID
 func volumeRemove(t *testing.T, client types.Client, volumeID string) {
 	log.WithField("volumeID", volumeID).Info("removing volume")
 	err := client.API().VolumeRemove(
@@ -312,7 +351,7 @@ func volumeRemove(t *testing.T, client types.Client, volumeID string) {
 	}
 }
 
-// same everywhere
+// Test volume attachment by volume ID
 func volumeAttach(
 	t *testing.T, client types.Client, volumeID string) *types.Volume {
 	log.WithField("volumeID", volumeID).Info("attaching volume")
@@ -330,11 +369,14 @@ func volumeAttach(
 	return reply
 }
 
-// same everywhere - omitted in EFS
+// Test volume retrieval by volume ID using VolumeInspect, which directly
+// retrieves matching volumes from the storage driver. Contrast with
+// volumeByID, which uses Volumes to retrieve all volumes from the storage
+// driver without filtering, and filters the volumes externally.
 func volumeInspect(
 	t *testing.T, client types.Client, volumeID string) *types.Volume {
 	log.WithField("volumeID", volumeID).Info("inspecting volume")
-	reply, err := client.API().VolumeInspect(nil, ec2.Name, volumeID, true)
+	reply, err := client.API().VolumeInspect(nil, ec2.Name, volumeID, false)
 	assert.NoError(t, err)
 
 	if err != nil {
@@ -345,7 +387,7 @@ func volumeInspect(
 	return reply
 }
 
-// same everywhere
+// Test if volume is attached, its Attachments field should be populated
 func volumeInspectAttached(
 	t *testing.T, client types.Client, volumeID string) *types.Volume {
 	log.WithField("volumeID", volumeID).Info("inspecting volume")
@@ -361,7 +403,7 @@ func volumeInspectAttached(
 	return reply
 }
 
-// same everywhere
+// Test if volume is detached, its Attachments field should not be populated
 func volumeInspectDetached(
 	t *testing.T, client types.Client, volumeID string) *types.Volume {
 	log.WithField("volumeID", volumeID).Info("inspecting volume")
@@ -378,7 +420,26 @@ func volumeInspectDetached(
 	return reply
 }
 
-// same everywhere
+// Test if volume is attached, but VolumeInspect is called with the attachments
+// flag set to false, then its Attachments field should still be populated.
+// However, its Attachments' DeviceName field should not be populated.
+func volumeInspectDetachedFail(
+	t *testing.T, client types.Client, volumeID string) *types.Volume {
+
+	log.WithField("volumeID", volumeID).Info("inspecting volume")
+	reply, err := client.API().VolumeInspect(nil, ec2.Name, volumeID, false)
+	assert.NoError(t, err)
+
+	if err != nil {
+		t.Error("failed volumeInspectDetachedFail")
+		t.FailNow()
+	}
+	apitests.LogAsJSON(reply, t)
+	assert.Len(t, reply.Attachments, 1)
+	return reply
+}
+
+// Test detaching volume by volume ID
 func volumeDetach(
 	t *testing.T, client types.Client, volumeID string) *types.Volume {
 	log.WithField("volumeID", volumeID).Info("detaching volume")
@@ -394,6 +455,10 @@ func volumeDetach(
 	return reply
 }
 
+///////////////////////////////////////////////////////////////////////
+/////////       PRIVATE TESTS FOR SNAPSHOT FUNCTIONALITY      /////////
+///////////////////////////////////////////////////////////////////////
+// Test retrieving snapshot by snapshot ID
 func snapshotInspect(
 	t *testing.T, client types.Client, snapshotID string) *types.Snapshot {
 	log.WithField("snapshotID", snapshotID).Info("inspecting snapshot")
@@ -408,30 +473,39 @@ func snapshotInspect(
 	return reply
 }
 
+// Test snapshot retrieval by snapshot name using Snapshots, which retrieves all snapshots
+// from the storage driver without filtering, and filters the snapshots externally.
 func snapshotByName(
 	t *testing.T, client types.Client, snapshotName string) *types.Snapshot {
 	log.WithField("snapshotName", snapshotName).Info("get snapshot by ec2.Name")
+	// Retrieve all snapshots
 	snapshots, err := client.API().Snapshots(nil)
 	assert.NoError(t, err)
 	if err != nil {
 		t.FailNow()
 	}
+	// Filter snapshots to those under the ec2 service,
+	// and find a snapshot matching inputted snapshot name
 	assert.Contains(t, snapshots, ec2.Name)
 	for _, vol := range snapshots[ec2.Name] {
 		if vol.Name == snapshotName {
 			return vol
 		}
 	}
+	// No matching snapshots found
 	t.FailNow()
 	t.Error("failed snapshotByName")
 	return nil
 }
 
+// Test snapshot creation from existing volume, specifying volume ID of volume
+// to copy, and snapshot name of snapshot to create
 func volumeSnapshot(
 	t *testing.T, client types.Client,
 	volumeID, snapshotName string) *types.Snapshot {
 	log.WithField("snapshotName", snapshotName).Info("creating snapshot")
 
+	// Prepare request for storage driver call to create snapshot
 	/*
 		opts := map[string]interface{}{
 			"priority": 2,
@@ -443,31 +517,36 @@ func volumeSnapshot(
 		//	Opts: opts,
 	}
 
+	// Send request and retrieve created libStorage types.Snapshot
 	reply, err := client.API().VolumeSnapshot(nil, ec2.Name,
 		volumeID, volumeSnapshotRequest)
 	assert.NoError(t, err)
 	if err != nil {
 		t.FailNow()
-		t.Error("failed snapshotCreate")
+		t.Error("failed volumeSnapshot")
 	}
 	apitests.LogAsJSON(reply, t)
 
+	// Check if snapshot name and volume ID are same
 	assert.Equal(t, snapshotName, reply.Name)
 	assert.Equal(t, volumeID, reply.VolumeID)
 	return reply
 }
 
+// Test copying snapshot from existing snapshot
 func snapshotCopy(
 	t *testing.T, client types.Client,
 	snapshotID, snapshotName, destinationID string) *types.Snapshot {
 	log.WithField("snapshotName", snapshotName).Info("copying snapshot")
 
+	// Prepare request for storage driver call to copy snapshot
 	snapshotCopyRequest := &types.SnapshotCopyRequest{
 		SnapshotName: snapshotName,
 		//DestinationID: destinationID,
 		//	Opts: opts,
 	}
 
+	// Send request and retrieve created libStorage types.Snapshot
 	reply, err := client.API().SnapshotCopy(nil, ec2.Name,
 		snapshotID, snapshotCopyRequest)
 	assert.NoError(t, err)
@@ -477,10 +556,12 @@ func snapshotCopy(
 	}
 	apitests.LogAsJSON(reply, t)
 
+	// Check if snapshot name is same
 	assert.Equal(t, snapshotName, reply.Name)
 	return reply
 }
 
+// Test snapshot removal by snapshot ID
 func snapshotRemove(t *testing.T, client types.Client, snapshotID string) {
 	log.WithField("snapshotID", snapshotID).Info("removing snapshot")
 	err := client.API().SnapshotRemove(
@@ -493,9 +574,11 @@ func snapshotRemove(t *testing.T, client types.Client, snapshotID string) {
 	}
 }
 
+// Test volume creation from existing snapshot
 func volumeCreateFromSnapshot(
 	t *testing.T, client types.Client,
 	snapshotID, volumeName string) *types.Volume {
+	// Prepare request for storage driver call to create volume from snapshot
 	fields := map[string]interface{}{
 		"snapshotID": snapshotID,
 		"volumeName": volumeName,
@@ -514,6 +597,7 @@ func volumeCreateFromSnapshot(
 		Opts: opts,
 	}
 
+	// Send request and retrieve created libStorage types.Volume
 	reply, err := client.API().VolumeCreateFromSnapshot(nil,
 		ec2.Name, snapshotID, volumeCreateRequest)
 	assert.NoError(t, err)
@@ -523,6 +607,7 @@ func volumeCreateFromSnapshot(
 	}
 	apitests.LogAsJSON(reply, t)
 
+	// Check if volume name, size, and opts are the same
 	assert.Equal(t, volumeName, reply.Name)
 	assert.Equal(t, size, reply.Size)
 	assert.Equal(t, opts["priority"], 2)
@@ -531,9 +616,12 @@ func volumeCreateFromSnapshot(
 	return reply
 }
 
+// Test copying volume from existing volume, using volume ID of the volume
+// to copy, and the desired volume name of the resulting volume copy.
 func volumeCopy(
 	t *testing.T, client types.Client,
 	volumeID, volumeName string) *types.Volume {
+	// Prepare request for storage driver call to copy volume
 	fields := map[string]interface{}{
 		"volumeID":   volumeID,
 		"volumeName": volumeName,
@@ -550,6 +638,7 @@ func volumeCopy(
 		//Opts: opts,
 	}
 
+	// Send request and retrieve created libStorage types.Volume
 	reply, err := client.API().VolumeCopy(nil,
 		ec2.Name, volumeID, volumeCopyRequest)
 	assert.NoError(t, err)
@@ -559,6 +648,7 @@ func volumeCopy(
 	}
 	apitests.LogAsJSON(reply, t)
 
+	// Check if inputted volume name is the same as the created volume's
 	assert.Equal(t, volumeName, reply.Name)
 
 	return reply
