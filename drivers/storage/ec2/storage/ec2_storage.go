@@ -50,7 +50,6 @@ type driver struct {
 	instanceDocument *instanceIdentityDocument
 	ec2Instance      *awsec2.EC2
 	awsCreds         *credentials.Credentials
-	mutex            *sync.Mutex
 }
 
 type instanceIdentityDocument struct {
@@ -145,9 +144,6 @@ func (d *driver) Init(context types.Context, config gofig.Config) error {
 
 	// Start new EC2 client with config info
 	d.ec2Instance = awsec2.New(mySession, awsConfig)
-
-	// Initialize for locking volume detach/attach
-	d.mutex = &sync.Mutex{}
 
 	log.WithFields(fields).Info("storage driver initialized")
 
@@ -939,9 +935,6 @@ func (d *driver) toTypesSnapshot(
 // Used in VolumeAttach
 func (d *driver) attachVolume(
 	ctx types.Context, volumeID, volumeName, deviceName string) error {
-	d.mutex.Lock()
-	defer d.mutex.Unlock()
-
 	// sanity check # of volumes to attach
 	vol, err := d.getVolume(ctx, volumeID, volumeName)
 	if err != nil {
