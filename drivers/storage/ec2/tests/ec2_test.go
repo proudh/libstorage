@@ -27,13 +27,8 @@ var (
 	configYAML = []byte(`
 ec2:
   region: us-west-2
-  endpoint: ec2.us-west-2.amazonaws.com`)
-	// TODO mimic EFS tag
-/*	configYAML = []byte(`
-ec2:
-  region: us-west-2
   tag: RR
-  endpoint: ec2.us-west-2.amazonaws.com`)*/
+  endpoint: ec2.us-west-2.amazonaws.com`)
 )
 
 var volumeName string
@@ -69,11 +64,9 @@ func TestVolumes(t *testing.T) {
 
 	tf := func(config gofig.Config, client types.Client, t *testing.T) {
 		//vol := volumeCreateEncrypted(t, client, "ls-enc-vol-ph")
-		// TODO mimic EFS tag
-		//volumeRemove(t, client, "RR/ls-test-vol2-ph")
-		//vol := volumeCreate(t, client, "ls-test-vol3-ph", config.GetString("tag"))
-		//vol := volumeCreate(t, client, "rr-test-vol-ph")
-		vol := volumeByName(t, client, "rr-test-vol2-ph")
+		volumeRemove(t, client, "vol-9ae01c12")
+		vol := volumeCreate(t, client, "ls-test-vol2-ph", config.GetString("ec2.tag"))
+		_ = volumeByName(t, client, vol.Name)
 		_ = volumeInspect(t, client, vol.ID)
 		_ = volumeInspectDetached(t, client, vol.ID)
 		_ = volumeByID(t, client, vol.ID)
@@ -214,7 +207,7 @@ func TestVolumes(t *testing.T) {
 ///////////////////////////////////////////////////////////////////////
 // Test volume creation specifying size and volume name
 func volumeCreate(
-	t *testing.T, client types.Client, volumeName string) *types.Volume {
+	t *testing.T, client types.Client, volumeName, tag string) *types.Volume {
 	log.WithField("volumeName", volumeName).Info("creating volume")
 	// Prepare request for storage driver call to create volume
 	size := int64(1)
@@ -239,11 +232,10 @@ func volumeCreate(
 	}
 	apitests.LogAsJSON(reply, t)
 
-	/* TODO mimic EFS tag
 	// If tag is set, then add tag to expected volumeName
 	if tag != "" {
 		volumeName = tag + "/" + volumeName
-	}*/
+	}
 	// Check if name and size are same
 	assert.Equal(t, volumeName, reply.Name)
 	assert.Equal(t, size, reply.Size)

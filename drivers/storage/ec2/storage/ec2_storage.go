@@ -41,8 +41,7 @@ const (
 	DefaultMaxRetries = 10
 
 	// tagDelimiter separates tags from volume or snapshot names
-	// TODO mimic EFS tag
-	//tagDelimiter = "/"
+	tagDelimiter = "/"
 )
 
 type driver struct {
@@ -88,13 +87,12 @@ func (d *driver) Init(context types.Context, config gofig.Config) error {
 	d.config = config
 
 	// Initialize with config content for logging
-	// TODO mimic EFS tag
 	fields := map[string]interface{}{
 		"moduleName": d.Name(),
 		"accessKey":  d.accessKey(),
 		"region":     d.region(),
 		"endpoint":   d.endpoint(),
-		//"tag":        d.tag(),
+		"tag":        d.tag(),
 	}
 
 	log.WithFields(fields).Debug("starting provider driver")
@@ -1247,12 +1245,8 @@ func (d *driver) createTags(id, name string) (err error) {
 			Resources: []*string{&id},
 			Tags:      []*awsec2.Tag{},
 		}
-		/*
-		     // TODO mimic EFS tag
-		   		// Append config tag to name
-		   		inputName = d.getFullName(d.getPrintableName(name))
-		*/
-		inputName = name
+		// Append config tag to name
+		inputName = d.getFullName(d.getPrintableName(name))
 	}
 
 	initCTInput()
@@ -1375,8 +1369,6 @@ func (d *driver) getInstance() (awsec2.Instance, error) {
 	return *resp.Reservations[0].Instances[0], nil
 }
 
-/*
-  // TODO mimic EFS tag
 // Get volume or snapshot name without config tag
 func (d *driver) getPrintableName(name string) string {
 	return strings.TrimPrefix(name, d.tag()+tagDelimiter)
@@ -1389,7 +1381,7 @@ func (d *driver) getFullName(name string) string {
 	}
 	return name
 }
-*/
+
 // Retrieve config arguments
 func (d *driver) accessKey() string {
 	return d.config.GetString("ec2.accessKey")
@@ -1421,11 +1413,9 @@ func (d *driver) maxRetries() int {
 	return 0
 }
 
-/*
-  // TODO mimic EFS tag
 func (d *driver) tag() string {
 	return d.config.GetString("ec2.tag")
-}*/
+}
 
 // TODO rexrayTag
 /*func (d *driver) rexrayTag() string {

@@ -20,7 +20,6 @@ func registerConfig() {
 	r.Key(gofig.String, "", "", "", "ec2.region")
 	r.Key(gofig.String, "", "", "", "ec2.endpoint")
 	r.Key(gofig.String, "", "", "", "ec2.maxRetries")
-	// TODO mimic EFS tag
-	//r.Key(gofig.String, "", "", "Tag prefix for EBS naming", "ec2.tag")
+	r.Key(gofig.String, "", "", "Tag prefix for EBS naming", "ec2.tag")
 	gofig.Register(r)
 }
