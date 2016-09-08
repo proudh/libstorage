@@ -1,4 +1,4 @@
-package ec2
+package ebs
 
 import (
 	"github.com/akutz/gofig"
@@ -6,7 +6,7 @@ import (
 
 const (
 	// Name is the provider's name.
-	Name = "ec2"
+	Name = "ebs"
 )
 
 func init() {

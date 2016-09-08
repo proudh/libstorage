@@ -1,18 +1,19 @@
 package executor
 
 import (
-	"bufio"
-	"io/ioutil"
-	"net/http"
-	"os/exec"
-	"regexp"
-	"strings"
-
+	/*	"bufio"
+		"io/ioutil"
+		"net/http"
+		"os/exec"
+		"regexp"
+		"strings"
+	*/
 	"github.com/akutz/gofig"
-	"github.com/akutz/goof"
+	//	"github.com/akutz/goof"
 
 	"github.com/emccode/libstorage/api/registry"
 	"github.com/emccode/libstorage/api/types"
+	"github.com/emccode/libstorage/drivers/storage/ebs"
 	"github.com/emccode/libstorage/drivers/storage/ec2"
 )
 
@@ -20,6 +21,7 @@ import (
 type driver struct {
 	config         gofig.Config
 	nextDeviceInfo *types.NextDeviceInfo
+	ebsx           types.StorageExecutor
 }
 
 func init() {
@@ -31,14 +33,17 @@ func newDriver() types.StorageExecutor {
 }
 
 func (d *driver) Init(ctx types.Context, config gofig.Config) error {
-	d.config = config
-	d.nextDeviceInfo = &types.NextDeviceInfo{
-		Prefix:  "xvd",
-		Pattern: "[a-z]",
-		Ignore:  false,
-	}
+	d.ebsx, _ = registry.NewStorageExecutor(ebs.Name)
+	return d.ebsx.Init(ctx, config)
+	/*	d.config = config
+		d.nextDeviceInfo = &types.NextDeviceInfo{
+			Prefix:  "xvd",
+			Pattern: "[a-z]",
+			Ignore:  false,
+		}
 
-	return nil
+		return nil
+	*/
 }
 
 func (d *driver) Name() string {
@@ -54,118 +59,126 @@ func InstanceID() (*types.InstanceID, error) {
 func (d *driver) InstanceID(
 	ctx types.Context,
 	opts types.Store) (*types.InstanceID, error) {
-	res, err := http.Get("http://169.254.169.254/latest/meta-data/instance-id/")
-	if err != nil {
-		return nil, goof.WithError("ec2 instance id lookup failed", err)
-	}
-	instanceID, err := ioutil.ReadAll(res.Body)
-	res.Body.Close()
-	if err != nil {
-		return nil, goof.WithError("error reading ec2 instance id", err)
-	}
+	return d.ebsx.InstanceID(ctx, opts)
+	/*
+		res, err := http.Get("http://169.254.169.254/latest/meta-data/instance-id/")
+		if err != nil {
+			return nil, goof.WithError("ec2 instance id lookup failed", err)
+		}
+		instanceID, err := ioutil.ReadAll(res.Body)
+		res.Body.Close()
+		if err != nil {
+			return nil, goof.WithError("error reading ec2 instance id", err)
+		}
 
-	iid := &types.InstanceID{Driver: ec2.Name}
-	if err := iid.MarshalMetadata(string(instanceID)); err != nil {
-		return nil, goof.WithError("error marshalling instance id", err)
-	}
+		iid := &types.InstanceID{Driver: d.Name()}
+		if err := iid.MarshalMetadata(string(instanceID)); err != nil {
+			return nil, goof.WithError("error marshalling instance id", err)
+		}
 
-	return iid, nil
+		return iid, nil*/
 }
 
 // NextDevice returns the next available device.
 func (d *driver) NextDevice(
 	ctx types.Context,
 	opts types.Store) (string, error) {
-	letters := []string{
-		"a", "b", "c", "d", "e", "f", "g", "h",
-		"i", "j", "k", "l", "m", "n", "o", "p"}
+	return d.ebsx.NextDevice(ctx, opts)
+	/*
+		letters := []string{
+			"a", "b", "c", "d", "e", "f", "g", "h",
+			"i", "j", "k", "l", "m", "n", "o", "p"}
 
-	localDeviceNames := make(map[string]bool)
+		localDeviceNames := make(map[string]bool)
 
-	localDevices, err := d.LocalDevices(
-		ctx, &types.LocalDevicesOpts{Opts: opts})
-	if err != nil {
-		return "", goof.WithError("error getting local devices", err)
-	}
-	localDeviceMapping := localDevices.DeviceMap
-
-	for localDevice := range localDeviceMapping {
-		re, _ := regexp.Compile(`^/dev/` +
-			d.nextDeviceInfo.Prefix +
-			`(` + d.nextDeviceInfo.Pattern + `)`)
-		res := re.FindStringSubmatch(localDevice)
-		if len(res) > 0 {
-			localDeviceNames[res[1]] = true
+		localDevices, err := d.LocalDevices(
+			ctx, &types.LocalDevicesOpts{Opts: opts})
+		if err != nil {
+			return "", goof.WithError("error getting local devices", err)
 		}
-	}
+		localDeviceMapping := localDevices.DeviceMap
 
-	ephemeralDevices, err := d.getEphemeralDevices()
-	if err != nil {
-		return "", goof.WithError("error getting ephemeral devices", err)
-	}
-
-	for _, ephemeralDevice := range ephemeralDevices {
-		re, _ := regexp.Compile(`^` +
-			d.nextDeviceInfo.Prefix +
-			`(` + d.nextDeviceInfo.Pattern + `)`)
-		res := re.FindStringSubmatch(ephemeralDevice)
-		if len(res) > 0 {
-			localDeviceNames[res[1]] = true
+		for localDevice := range localDeviceMapping {
+			re, _ := regexp.Compile(`^/dev/` +
+				d.nextDeviceInfo.Prefix +
+				`(` + d.nextDeviceInfo.Pattern + `)`)
+			res := re.FindStringSubmatch(localDevice)
+			if len(res) > 0 {
+				localDeviceNames[res[1]] = true
+			}
 		}
-	}
 
-	for _, letter := range letters {
-		if !localDeviceNames[letter] {
-			nextDeviceName := "/dev/" +
-				d.nextDeviceInfo.Prefix + letter
-			return nextDeviceName, nil
+		ephemeralDevices, err := d.getEphemeralDevices()
+		if err != nil {
+			return "", goof.WithError("error getting ephemeral devices", err)
 		}
-	}
-	return "", goof.New("No available device")
+
+		for _, ephemeralDevice := range ephemeralDevices {
+			re, _ := regexp.Compile(`^` +
+				d.nextDeviceInfo.Prefix +
+				`(` + d.nextDeviceInfo.Pattern + `)`)
+			res := re.FindStringSubmatch(ephemeralDevice)
+			if len(res) > 0 {
+				localDeviceNames[res[1]] = true
+			}
+		}
+
+		for _, letter := range letters {
+			if !localDeviceNames[letter] {
+				nextDeviceName := "/dev/" +
+					d.nextDeviceInfo.Prefix + letter
+				return nextDeviceName, nil
+			}
+		}
+		return "", goof.New("No available device")
+	*/
 }
 
 func (d *driver) LocalDevices(
 	ctx types.Context,
 	opts *types.LocalDevicesOpts) (*types.LocalDevices, error) {
-	out, err := exec.Command(
-		"lsblk", "--pairs", "--noheadings", "--output=name,mountpoint").Output()
-	if err != nil {
-		return nil, goof.WithError("error running lsblk", err)
-	}
-
-	input := string(out)
-
-	// populate map parsing output from lsblk
-	localDevices := make(map[string]string)
-	scanner := bufio.NewScanner(strings.NewReader(input))
-	scanner.Split(bufio.ScanWords)
-
-	count := 0
-	var (
-		name,
-		mountPoint string
-	)
-
-	for scanner.Scan() {
-		if count%2 == 0 {
-			// get volume name
-			name = "/dev/" + scanner.Text()[6:len(scanner.Text())-1]
-		} else {
-			// set mountpoint corresponding to volume name
-			if mountPoint = scanner.Text()[12 : len(scanner.Text())-1]; mountPoint == "" {
-				mountPoint = "none"
-			}
-			localDevices[name] = mountPoint
+	return d.ebsx.LocalDevices(ctx, opts)
+	/*
+		out, err := exec.Command(
+			"lsblk", "--pairs", "--noheadings", "--output=name,mountpoint").Output()
+		if err != nil {
+			return nil, goof.WithError("error running lsblk", err)
 		}
-		count++
-	}
 
-	return &types.LocalDevices{
-		Driver:    ec2.Name,
-		DeviceMap: localDevices,
-	}, nil
+		input := string(out)
+
+		// populate map parsing output from lsblk
+		localDevices := make(map[string]string)
+		scanner := bufio.NewScanner(strings.NewReader(input))
+		scanner.Split(bufio.ScanWords)
+
+		count := 0
+		var (
+			name,
+			mountPoint string
+		)
+
+		for scanner.Scan() {
+			if count%2 == 0 {
+				// get volume name
+				name = "/dev/" + scanner.Text()[6:len(scanner.Text())-1]
+			} else {
+				// set mountpoint corresponding to volume name
+				if mountPoint = scanner.Text()[12 : len(scanner.Text())-1]; mountPoint == "" {
+					mountPoint = "none"
+				}
+				localDevices[name] = mountPoint
+			}
+			count++
+		}
+
+		return &types.LocalDevices{
+			Driver:    d.Name(),
+			DeviceMap: localDevices,
+		}, nil*/
 }
 
+/*
 func (d *driver) getEphemeralDevices() (deviceNames []string, err error) {
 	// Get list of all block devices
 	res, err := http.Get("http://169.254.169.254/latest/meta-data/block-device-mapping/")
@@ -204,4 +217,4 @@ func (d *driver) getEphemeralDevices() (deviceNames []string, err error) {
 	}
 
 	return deviceNames, nil
-}
+}*/
