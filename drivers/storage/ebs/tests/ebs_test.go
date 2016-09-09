@@ -25,7 +25,7 @@ import (
 var (
 	//	configYAML = []byte(``)
 	configYAML = []byte(`
-ebs:
+ec2:
   region: us-west-2
   tag: RR
   endpoint: ec2.us-west-2.amazonaws.com`)
@@ -64,9 +64,9 @@ func TestConfig(t *testing.T) {
 	}
 
 	tf := func(config gofig.Config, client types.Client, t *testing.T) {
-		fmt.Printf("ebs.tag: %s", config.GetString("ebs.tag"))
+		fmt.Printf("ec2.tag: %s", config.GetString("ec2.tag"))
 	}
-	apitests.Run(t, ebs.Name, configYAML, tf)
+	apitests.Run(t, "ebs", configYAML, tf)
 }
 
 /*func TestVolumes(t *testing.T) {

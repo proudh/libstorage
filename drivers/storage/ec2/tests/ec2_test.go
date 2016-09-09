@@ -25,7 +25,7 @@ import (
 var (
 	//	configYAML = []byte(``)
 	configYAML = []byte(`
-ebs:
+ec2:
   region: us-west-2
   tag: RR
   endpoint: ec2.us-west-2.amazonaws.com`)
@@ -58,7 +58,6 @@ func TestMain(m *testing.M) {
 	os.Exit(ec)
 }
 
-/*
 func TestConfig(t *testing.T) {
 	if skipTests() {
 		t.SkipNow()
@@ -68,9 +67,9 @@ func TestConfig(t *testing.T) {
 		fmt.Printf("ec2.tag: %s", config.GetString("ec2.tag"))
 	}
 	apitests.Run(t, ec2.Name, configYAML, tf)
-}*/
+}
 
-func TestVolumes(t *testing.T) {
+/*func TestVolumes(t *testing.T) {
 	if skipTests() {
 		t.SkipNow()
 	}
@@ -85,7 +84,7 @@ func TestVolumes(t *testing.T) {
 		//vol := volumeInspect(t, client, "vol-d70b7b5e")
 		//vol := volumeInspectDetached(t, client, "vol-972e721e")
 
-		/*			snapshotRemove(t, client, "snap-11839557")
+					snapshotRemove(t, client, "snap-11839557")
 					vol1 := volumeCreateFromSnapshot(t, client, "snap-3df339c1", "ls-test-snap2-ph")
 					_ = volumeCopy(t, client, "vol-8efba507", "ls-test-copy-ph")
 					vol1 := volumeCreate(t, client, "ls-test-vol-ph")
@@ -96,10 +95,9 @@ func TestVolumes(t *testing.T) {
 					_ = volumeCreate(t, client, volumeName)
 					vol1 := volumeByName(t, client, volumeName)
 					volumeRemove(t, client, vol1.ID)
-		*/
 	}
 	apitests.Run(t, ec2.Name, configYAML, tf)
-}
+}*/
 
 ///////////////////////////////////////////////////////////////////////
 /////////                    PUBLIC TESTS                     /////////
